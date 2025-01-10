@@ -20,9 +20,7 @@ logger = get_logger(__name__)
 class RewardModelingEpisode:
     query_token_ids: List[int]
     chosen_token_ids: List[int]
-    chosen_reasoning_token_ids: List[int]
     rejected_token_ids: List[int]
-    rejected_reasoning_token_ids: List[int]
 
     def __post_init__(self):
         assert len(self.query_token_ids) > 0
@@ -165,12 +163,10 @@ class RewardModelingEpisodeGenerator(EpisodeGenerator):
 
         query = format_string(self.query_template, **query_format_kwargs)
         chosen = format_string(self.chosen_template, **chosen_format_kwargs)
-        chosen_reasoning = format_string(self.chosen_template, **chosen_format_kwargs)
-        
         rejected = format_string(self.rejected_template, **rejected_format_kwargs)
 
-        query_token_ids, chosen_token_ids = self._tokenize_text(query, chosen)
-        query_token_ids, rejected_token_ids = self._tokenize_text(query, rejected)
+        query_token_ids, chosen_token_ids = self._tokenize_query_and_response(query, chosen)
+        query_token_ids, rejected_token_ids = self._tokenize_query_and_response(query, rejected)
 
         return RewardModelingEpisode(
             query_token_ids=query_token_ids,
@@ -178,7 +174,7 @@ class RewardModelingEpisodeGenerator(EpisodeGenerator):
             rejected_token_ids=rejected_token_ids
         )
 
-    def _tokenize_text(
+    def _tokenize_query_and_response(
         self, 
         query: str, 
         response: str
