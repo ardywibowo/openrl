@@ -1,4 +1,3 @@
 from .calibration import LinguisticCalibration
 from .answer_extraction import AnswerExtraction
 from .probability_forecasting import ProbabilityForecasting
-from .probability_forecasting_next_token import ProbabilityForecastingNextToken

@@ -7,26 +7,12 @@ from datasets import Dataset
 from tqdm import tqdm
 
 from treetune.common.py_utils import format_string
-from treetune.episode_generators.base_episode_generator import (
-    EpisodeGenerator,
-    Episode,
-)
+from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.logging_utils import get_logger
 from treetune.tasks.base_task import Task
+from treetune.episodes import RewardModelingEpisode, Episode
 
 logger = get_logger(__name__)
-
-@dataclass
-class RewardModelingEpisode:
-    query_token_ids: List[int]
-    chosen_token_ids: List[int]
-    rejected_token_ids: List[int]
-
-    def __post_init__(self):
-        assert len(self.query_token_ids) > 0
-        assert len(self.chosen_token_ids) > 0
-        assert len(self.rejected_token_ids) > 0
-
 
 @EpisodeGenerator.register("reward_modeling")
 class RewardModelingEpisodeGenerator(EpisodeGenerator):

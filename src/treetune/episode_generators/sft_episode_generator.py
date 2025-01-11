@@ -5,10 +5,8 @@ from datasets import Dataset
 from tqdm import tqdm
 
 from treetune.common.py_utils import format_string
-from treetune.episode_generators.base_episode_generator import (
-    EpisodeGenerator,
-    Episode,
-)
+from treetune.episode_generators.base_episode_generator import EpisodeGenerator
+from treetune.episodes import Episode
 from treetune.logging_utils import get_logger
 from treetune.tasks.base_task import Task
 

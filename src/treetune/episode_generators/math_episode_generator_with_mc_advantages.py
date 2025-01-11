@@ -14,7 +14,7 @@ from tqdm import tqdm
 from treetune.common import Lazy
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
-from treetune.episode_generators.base_episode_generator import Episode
+from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
 from treetune.logging_utils import get_logger
 

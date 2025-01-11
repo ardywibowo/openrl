@@ -7,24 +7,12 @@ from datasets import Dataset
 from tqdm import tqdm
 
 from treetune.common.py_utils import format_string
-from treetune.episode_generators.base_episode_generator import (
-    EpisodeGenerator,
-    Episode,
-)
+from treetune.episode_generators.base_episode_generator import EpisodeGenerator
+from treetune.episodes import BinaryClassificationEpisode
 from treetune.logging_utils import get_logger
 from treetune.tasks.base_task import Task
 
 logger = get_logger(__name__)
-
-@dataclass
-class BinaryClassificationEpisode:
-    query_token_ids: List[int]
-    target_prob: float
-
-    def __post_init__(self):
-        assert len(self.query_token_ids) > 0
-        assert self.target_prob is not None
-
 
 @EpisodeGenerator.register("binary_classification")
 class BinaryClassificationEpisodeGenerator(EpisodeGenerator):
@@ -129,7 +117,7 @@ class BinaryClassificationEpisodeGenerator(EpisodeGenerator):
             episode = self._convert_example_to_episode(example)
             self.episode_cache.append(episode)
 
-    def _convert_example_to_episode(self, example: Dict[str, Any]) -> Episode:
+    def _convert_example_to_episode(self, example: Dict[str, Any]) -> BinaryClassificationEpisode:
         query_format_kwargs = {
             key: example[key] for key in self.query_format_keys if key in example
         }
@@ -184,7 +172,7 @@ class BinaryClassificationEpisodeGenerator(EpisodeGenerator):
 
     def log_episodes(
         self,
-        episodes: Union[List[Episode], Dataset],
+        episodes: Union[List[BinaryClassificationEpisode], Dataset],
         iteration_idx: int,
         num_examples: int = 100,
         num_examples_for_wandb: int = 128,

@@ -17,8 +17,8 @@ from treetune.common import Lazy
 from treetune.common.deepspeed_utils import prepare_data_loader_for_inference
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators import TreeEpisodeUtils
-from treetune.episode_generators.base_episode_generator import Episode
-from treetune.episode_generators.episode_generator_with_reward_function import RewardFunction
+from treetune.episodes import Episode
+from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
 from treetune import logging_utils

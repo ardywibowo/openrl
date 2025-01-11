@@ -6,7 +6,7 @@ import numpy as np
 from datasets import Dataset
 
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
-from treetune.episode_generators.base_episode_generator import Episode
+from treetune.episodes import Episode
 from treetune.logging_utils import get_logger
 
 from tqdm import tqdm

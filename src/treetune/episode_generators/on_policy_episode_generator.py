@@ -17,7 +17,8 @@ from treetune.common import Lazy
 from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
 from treetune.common.py_utils import find_n_free_ports
 from treetune.common.vllm_server import VLLMServer, compute_vllm_stats
-from treetune.episode_generators.base_episode_generator import EpisodeGenerator, Episode
+from treetune.episode_generators.base_episode_generator import EpisodeGenerator
+from treetune.episodes import Episode
 from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
 from treetune.logging_utils import get_logger
 from treetune.tasks.base_task import Task

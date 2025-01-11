@@ -13,10 +13,8 @@ from wandb.apis.public import Run
 from treetune import logging_utils
 from treetune.common import Lazy
 from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators.base_episode_generator import (
-    Episode,
-    EpisodeGeneratorStrategy,
-)
+from treetune.episode_generators.base_episode_generator import EpisodeGeneratorStrategy
+from treetune.episodes import Episode
 from treetune.episode_generators.path_aggregators import PathAggregator
 from treetune.episode_generators.path_filters import PathFilter, SuccessfulPathFilter
 from treetune.episode_generators.path_post_processors import PathPostProcessor

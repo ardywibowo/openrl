@@ -1,14 +1,16 @@
 local hf_model_name = 'meta-llama/Llama-3.1-8B-Instruct';
 
 
-local verifier_template = 'You are a math teacher. Grade the Solution, verifying correctness step by step.
-Use Expected Answer to find any erroneous step in the Solution.
-At the end of the Solution verification, when you give your final grade, write it in
-the form "Verification: Is the answer correct (Yes/No)? X", where X is either Yes
-or No.
-Question: {problem}
-Solution: {solution}
-Expected Answer: {expected_answer}';
+local verifier_template = 'You are a math teacher. Grade the Solution, verifying correctness step by step. Use Expected Answer to find any erroneous step in the Solution. At the end of the Solution verification, when you give your final grade, write it in the form "Verification: Is the answer correct (Yes/No)? X", where X is either Yes or No.
+
+Question:
+{problem}
+
+Solution:
+{solution}
+
+Expected Answer:
+{expected_answer}';
 
 
 local query_template = 'Below is an instruction that describes a task. Write a response that appropriately completes the request.

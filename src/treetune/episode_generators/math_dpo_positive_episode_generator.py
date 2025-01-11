@@ -9,25 +9,12 @@ import wandb
 from datasets import Dataset
 
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
-from treetune.episode_generators.base_episode_generator import Episode
+from treetune.episodes import Episode, DPOPositiveEpisode
 from treetune.logging_utils import get_logger
 
 from tqdm import tqdm
 
 logger = get_logger(__name__)
-
-
-# so I could use DPOEpisode from  base_episode_generator.py, but I didn't like it as it has a list of reject responses, which is not needed here.
-@dataclass
-class DPOPositiveEpisode:
-    query_token_ids: List[int]
-    accept_response_token_ids: List[int]
-    reject_response_token_ids: List[int]
-
-    def __post_init__(self):
-        assert len(self.query_token_ids) > 0
-        assert len(self.accept_response_token_ids) > 0
-        assert len(self.reject_response_token_ids) > 0
 
 @EpisodeGenerator.register("math_dpo_positive_episode_generator")
 class MATHDPOPositiveEpisodeGenerator(MathEpisodeGenerator):
@@ -325,4 +312,3 @@ class MATHDPOPositiveEpisodeGenerator(MathEpisodeGenerator):
 
         if log_to_cloud and self.cloud_logger is not None:
             self.cloud_logger.log({f"episodes_{iteration_idx:04}": table})
-

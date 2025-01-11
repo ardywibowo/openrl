@@ -1,73 +1,17 @@
 import json
 import uuid
-from typing import Any, Dict, List, Union, Optional, Tuple
+from typing import Any, Dict, List, Union, Optional
 
 import evaluate
 import numpy as np
 from datasets import Dataset
 
 from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators.base_episode_generator import Episode
-from treetune.episode_generators.episode_generator_with_reward_function import (
-    EpisodeGeneratorWithRewardFunction,
-    RewardFunction,
-)
+from treetune.episode_generators import EpisodeGeneratorWithRewardFunction
+from treetune.episodes import Episode
 from treetune.logging_utils import get_logger
-from treetune.tasks import Task, GSM8K
-from treetune.tasks.math import MATH
-from treetune.tokenization_utils import Tokenizer
 
 logger = get_logger(__name__)
-
-
-@RewardFunction.register("math_reward_function")
-class MATHRewardFunction(RewardFunction):
-    def __init__(
-        self,
-        tokenizer: Tokenizer,
-        math_task: Task,
-        penalize_unfinished_response: bool = False,
-        unfinished_response_penalty: float = -1.0,
-        timeout: Optional[int] = None,
-    ):
-        assert isinstance(math_task, (MATH, GSM8K))
-        self.tokenizer = tokenizer
-        self.math_task = math_task
-        self.penalize_unfinished_response = penalize_unfinished_response
-        self.unfinished_response_penalty = unfinished_response_penalty
-        self.timeout = timeout
-
-    def get_unfinished_response_penalty(self) -> float:
-        return float(self.unfinished_response_penalty)
-
-    def __call__(
-        self, query: str, response: str, dataset_instance: Dict[str, Any]
-    ) -> Tuple[float, bool]:
-        pred_answer = self.math_task.extract_predicted_answer_from_text(
-            response, dataset_instance["problem"]
-        )
-        is_unfinished_response = pred_answer is None
-        if is_unfinished_response and self.penalize_unfinished_response:
-            return float(self.unfinished_response_penalty), is_unfinished_response
-
-        gold_answer = dataset_instance["answer"]
-        reward = self.math_task.grade_answer(
-            given_answer=pred_answer,
-            ground_truth=gold_answer,
-            item=dataset_instance,
-            timeout=self.timeout,
-        )
-
-        return float(reward), is_unfinished_response
-
-    def is_unfinished_response(
-        self, response: str, dataset_instance: Dict[str, Any]
-    ) -> bool:
-        pred_answer = self.math_task.extract_predicted_answer_from_text(
-            response, dataset_instance["problem"]
-        )
-        return pred_answer is None
-
 
 @EpisodeGenerator.register("math_episode_generator")
 class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
