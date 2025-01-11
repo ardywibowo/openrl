@@ -1882,7 +1882,7 @@ class PPOTrainer(DeepSpeedPolicyTrainer):
             use_cache=False,  # We don't need the cache for training
         )
 
-        predicted_values = outputs  # Shape: (batch_size, max_seq_len)
+        predicted_values = outputs["value"]  # Shape: (batch_size, max_seq_len)
 
         # We convert the values to float32 to avoid any precision issues
         predicted_values = predicted_values.to(torch.float32)

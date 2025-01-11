@@ -15,12 +15,12 @@ TIMEOUT_DURATION=$((TIMEOUT_DURATION * 60))
 CONFIG_NAMES=(
   # "experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
   # "experiments/vineppo/sft_deepseekmath_for_MATH"
-  "experiments/vineppo/polIter_deepseekSft2_ppo_MATH"
-  "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
+  # "experiments/vineppo/polIter_deepseekSft2_ppo_MATH"
+  # "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
   # "experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
   # "experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
   "experiments/reward_modeling/reward_modeling_llama2"
-  "experiments/reward_modeling/reward_modeling_llama2_no_value_head_finetune"
+  "experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
 )
 
 # Loop through each configuration

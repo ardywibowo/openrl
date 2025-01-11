@@ -48,7 +48,7 @@ local rejected_template = '
         num_epochs_per_iteration: 4,
         training_args+: {
             learning_rate: 1e-6,
-            weight_decay: 0.0001,
+            weight_decay: 0.00,
             warmup_ratio: 0.10,
 
             save_steps: 400,
@@ -61,11 +61,11 @@ local rejected_template = '
             gradient_accumulation_steps: 8,
             gradient_checkpointing: false,
         },
-        finetune_iterations: 3,
+        finetune_iterations: 0,
         deepspeed_config: (import 'deepspeed/zero_2.jsonnet'),
     },
     use_deepspeed: true,
 
     num_episodes_per_iteration: null,
-    num_iterations: 6,
+    num_iterations: 1,
 }

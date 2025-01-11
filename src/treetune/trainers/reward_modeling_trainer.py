@@ -71,7 +71,7 @@ class RewardModelingDataCollator:
 
         return batch
     
-    def process_instance(query_token_ids, response_token_ids, max_seq_len):
+    def process_instance(self, query_token_ids, response_token_ids, max_seq_len):
         # It doesn't matter what the pad token id is, since we will mask it out anyway
         pad_token_id = 0
         pad_label = -100
@@ -152,7 +152,7 @@ class RewardModelingTrainer(MaximumLikelihoodTrainer):
                 attention_mask[:, 0] == 1
             ), "Flash attention models do not support left padding"
             outputs = model(input_ids=input_ids)
-        logits = outputs['value']  # Shape: (batch_size, max_seq_len, vocab_size)
+        logits = outputs['value']  # Shape: (batch_size, max_seq_len)
         orig_dtype = logits.dtype
         
         # Last indexes is the sum of the attention mask
@@ -162,7 +162,7 @@ class RewardModelingTrainer(MaximumLikelihoodTrainer):
         logits = logits.to(torch.float32)
         
         # Extract the last logits according to the last indexes
-        last_logits = logits[range(logits.size(0)), last_indexes.long(), :]
+        last_logits = logits[range(logits.size(0)), last_indexes.long()]
         
         mean_entropy = masked_mean(entropy_from_logits(last_logits), torch.ones_like(last_logits))
         mean_entropy = mean_entropy.detach().clone()
@@ -174,6 +174,7 @@ class RewardModelingTrainer(MaximumLikelihoodTrainer):
         probs = torch.sigmoid(preferred_rewards - rejected_rewards)
         loss = (-torch.log(probs + 1e-5)).mean()
         
+        metrics = {}
         if self.lm_lambda > 0:
             lm_loss, metrics = self.compute_lm_loss(logits, labels)
             loss += self.lm_lambda * lm_loss

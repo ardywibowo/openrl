@@ -82,7 +82,7 @@ class PreTrainedModelForValueNetwork(Model, nn.Module):
         if output.dtype != self.value_head.weight.dtype:
             output = output.to(self.value_head.weight.dtype)
 
-        value = self.value_head(output)
+        value = self.value_head(output).squeeze(-1)
         
         output_dict = {key: getattr(base_model_output, key) for key in base_model_output.keys()}
         output_dict["value"] = value
