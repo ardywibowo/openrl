@@ -41,7 +41,7 @@ class RewardModelingDataCollator:
         # Get the maximum sequence length
         max_seq_len = max(
             max(
-                len(instance["query_token_ids"]) + len(instance["chosen_token_ids"])
+                len(instance["query_token_ids"]) + len(instance["chosen_token_ids"]),
                 len(instance["query_token_ids"]) + len(instance["rejected_token_ids"])
             )
             for instance in data_instances
