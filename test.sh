@@ -3,24 +3,19 @@
 # Activate conda environment
 source ./private/keys.sh
 
-export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
-
-# Timeout duration in minutes
-TIMEOUT_DURATION=15
-
 # Timeout duration in seconds
-TIMEOUT_DURATION=$((TIMEOUT_DURATION * 60))
+TIMEOUT_DURATION=300  # Set the timeout (e.g., 300 seconds = 5 minutes)
 
 # List of configuration names
 CONFIG_NAMES=(
-  # "experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
-  # "experiments/vineppo/sft_deepseekmath_for_MATH"
-  # "experiments/vineppo/polIter_deepseekSft2_ppo_MATH"
-  # "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
-  # "experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
-  # "experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
+  "experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
+  "experiments/vineppo/sft_deepseekmath_for_MATH"
+  "experiments/vineppo/polIter_deepseekSft2_ppo_MATH.jsonnet"
+  "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation"
+  "experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
+  "experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
   "experiments/reward_modeling/reward_modeling_llama2"
-  "experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
+  "experiments/reward_modeling/reward_modeling_llama2_no_value_head_finetune"
 )
 
 # Loop through each configuration
@@ -49,6 +44,13 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
   TRAINING_PID=$!
 
   echo "Started training job for $CONFIG_NAME with PID $TRAINING_PID. Logs: $LOG_FILE"
+
+  # Wait for the log file to appear
+  echo "Waiting for log file to be created..."
+  while [ ! -f "$LOG_FILE" ]; do
+    sleep 1
+  done
+  echo "Log file detected, starting tail."
 
   # Monitor logs in real time while enforcing the timeout
   { sleep $TIMEOUT_DURATION; kill -9 $TRAINING_PID 2>/dev/null; } &
