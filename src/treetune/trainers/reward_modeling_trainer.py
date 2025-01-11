@@ -41,8 +41,8 @@ class RewardModelingDataCollator:
         # Get the maximum sequence length
         max_seq_len = max(
             max(
-                len(instance["query_token_ids"]) + len(instance["chosen_token_ids"]) + len(instance["chosen_reasoning_token_ids"]),
-                len(instance["query_token_ids"]) + len(instance["rejected_token_ids"]) + len(instance["rejected_reasoning_token_ids"]),
+                len(instance["query_token_ids"]) + len(instance["chosen_token_ids"])
+                len(instance["query_token_ids"]) + len(instance["rejected_token_ids"])
             )
             for instance in data_instances
         )
@@ -52,18 +52,16 @@ class RewardModelingDataCollator:
             query_token_ids = instance["query_token_ids"]
             
             chosen_token_ids = instance["chosen_token_ids"]
-            chosen_reasoning_token_ids = instance["chosen_reasoning_token_ids"]
             
-            curr_batch = self.process_instance(query_token_ids, chosen_token_ids, chosen_reasoning_token_ids, max_seq_len)
+            curr_batch = self.process_instance(query_token_ids, chosen_token_ids, max_seq_len)
             batch.append(curr_batch)
         
         for instance in data_instances:
             query_token_ids = instance["query_token_ids"]
             
             rejected_token_ids = instance["rejected_token_ids"]
-            rejected_reasoning_token_ids = instance["rejected_reasoning_token_ids"]
             
-            curr_batch = self.process_instance(query_token_ids, rejected_token_ids, rejected_reasoning_token_ids, max_seq_len)
+            curr_batch = self.process_instance(query_token_ids, rejected_token_ids, max_seq_len)
             batch.append(curr_batch)
         
         batch = {k: [v[k] for v in batch] for k in batch[0].keys()}
@@ -73,7 +71,7 @@ class RewardModelingDataCollator:
 
         return batch
     
-    def process_instance(query_token_ids, response_token_ids, response_reasoning_token_ids, max_seq_len):
+    def process_instance(query_token_ids, response_token_ids, max_seq_len):
         # It doesn't matter what the pad token id is, since we will mask it out anyway
         pad_token_id = 0
         pad_label = -100
@@ -92,7 +90,6 @@ class RewardModelingDataCollator:
 
         labels = (
             [pad_label] * (len(query_token_ids) + len(response_token_ids))
-            + response_reasoning_token_ids
             + [pad_label] * num_pad_at_end
         )
         batch["labels"] = labels
