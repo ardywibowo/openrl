@@ -19,6 +19,15 @@ Code for fast iteration and performantly implementing various reinforcement lear
 
 ### Installation
 
+Firstly, add your keys in a file named `private/keys.sh`. An example is as follows:
+
+```bash
+# Set environment variables
+export APP_SEED="[Seed for reproducibility]"
+export WANDB_API_KEY="[Wandb API Key]"
+huggingface-cli login --token "[Huggingface Token]"
+```
+
 This project is implemented based torch, Huggingface, FlashAttention, DeepSpeed, and vLLM libraries. To obtain the dependencies, run the `setup.sh` script. This script installs the necessary libraries, frameworks, and downloads example datasets for finetuning models for math to get you started:
 
 ```bash
