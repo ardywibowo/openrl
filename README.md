@@ -8,10 +8,11 @@ Code for fast iteration and performantly implementing various reinforcement lear
 ## Methods Implemented
 
 - [**Proximal Policy Optimization (PPO)**](https://arxiv.org/abs/1707.06347): The main reinforcement learning algorithm implemented in this codebase.
+- [**Direct Preference Optimization (DPO)**](https://arxiv.org/abs/2305.18290): Directly trains the policy model from pairs of chosen and rejected response samples.
 - [**VinePPO**](https://arxiv.org/abs/2410.01679): A variant of PPO that uses rollouts to compute MC advantages.
-- [**Linguistic Calibration**](https://arxiv.org/abs/2404.00474): A method to calibrate the language model to the task.
+- [**Linguistic Calibration**](https://arxiv.org/abs/2404.00474): A method to calibrate language models towards their own confidence and uncertainties, enabling them to provide accurate and calibrated responses to factual questions.
 - [**Generative Verifiers**](https://arxiv.org/abs/2408.15240): A method that models the verifier as a generative model.
-- [**Reward Modeling**](https://arxiv.org/abs/2203.02155): A reward model SFT trainer.
+- [**Reward Modeling**](https://arxiv.org/abs/2203.02155): Train models to imitate preferred human responses and use it to score LLM generated responses for use in RL.
 - **Behavior Cloning (Imitation Learning)**: A maximum likelihood estimation trainer to do behavior cloning.
 
 ## Coming Soon
