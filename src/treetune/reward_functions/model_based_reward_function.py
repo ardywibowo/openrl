@@ -48,7 +48,9 @@ class ModelBasedRewardFunction(RewardFunction):
         cache_reward_model_on_cpu: bool = False,
         temp_cache_dir: Optional[str] = None,
         unfinished_response_penalty: Optional[float] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         # `reward_model` and `reward_pipeline_model_name` are mutually exclusive
         if reward_model is not None and reward_pipeline_model_name is not None:
             raise ValueError(
@@ -87,7 +89,11 @@ class ModelBasedRewardFunction(RewardFunction):
     def get_unfinished_response_penalty(self) -> float:
         return float(self.unfinished_response_penalty)
 
-    def batch_compute_rewards(self, episodes: List[Episode]) -> List[Episode]:
+    def batch_compute_rewards(
+        self, 
+        episodes: List[Episode],
+        iteration: Optional[int] = None
+    ) -> Tuple[List[Episode], Dict[str, Any]]:
         sequences = [
             self.tokenizer.decode(e.query_token_ids + e.response_token_ids)
             for e in episodes
@@ -107,8 +113,9 @@ class ModelBasedRewardFunction(RewardFunction):
             )
             for reward, e in zip(rewards, episodes)
         ]
-
-        return episodes_with_reward
+        
+        metrics = {}
+        return episodes_with_reward, metrics
 
     def _init_reward_model_pipeline(
         self,

@@ -26,7 +26,10 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.reward_function = reward_function.construct(tokenizer=self.tokenizer)
+        self.reward_function = reward_function.construct(
+            distributed_state=self.distributed_state,
+            tokenizer=self.tokenizer
+        )
         self.append_bos_to_query = append_bos_to_query
         self.append_eos_to_response = append_eos_to_response
 
@@ -43,10 +46,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             paths.extend(curr_paths)
         
         episodes, metrics = self.reward_function.batch_compute_rewards(
-            episodes_without_rewards, 
-            instances, 
-            paths
-        )
+            episodes_without_rewards, iteration)
         self._cloud_log({
             **metrics,
             "train/global_iteration": iteration

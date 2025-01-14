@@ -19,7 +19,9 @@ class MATHRewardFunction(RewardFunction):
         penalize_unfinished_response: bool = False,
         unfinished_response_penalty: float = -1.0,
         timeout: Optional[int] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         assert isinstance(math_task, (MATH, GSM8K))
         self.tokenizer = tokenizer
         self.math_task = math_task
@@ -53,11 +55,13 @@ class MATHRewardFunction(RewardFunction):
     def batch_compute_rewards(
         self,
         episodes_without_rewards: List[Episode], 
-        instances: List[Dict[str, Any]], 
-        paths: List[Dict[str, Any]]
+        iteration: Optional[int] = None
     ) -> Tuple[List[Episode], Dict[str, Any]]:
         episodes_with_rewards = []
-        for episode, instance, path in zip(episodes_without_rewards, instances, paths):
+        for episode in episodes_without_rewards:
+            path = episodes_without_rewards['metadata']['path']
+            instance = episodes_without_rewards['metadata']['instance']
+            
             query_text = path["node_chain"][0]["text"]
             full_text = path["node_chain"][-1]["full_text"]
             response_text = full_text[len(query_text):]

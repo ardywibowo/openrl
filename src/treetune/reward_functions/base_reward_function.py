@@ -8,6 +8,14 @@ from treetune.episodes import Episode
 
 
 class RewardFunction(Registrable):
+    def __init__(
+        self, 
+        distributed_state: PartialState, 
+        cloud_logger: Optional[Run] = None
+    ) -> None:
+        self.distributed_state = distributed_state
+        self.cloud_logger = cloud_logger
+    
     def get_unfinished_response_penalty(self) -> float:
         raise NotImplementedError
 
@@ -25,9 +33,8 @@ class RewardFunction(Registrable):
         return self.distributed_state.is_main_process
     
     def batch_compute_rewards(
-        self,
-        episodes_without_rewards: List[Episode], 
-        instances: List[Dict[str, Any]],
-        paths: List[Dict[str, Any]]
+        self, 
+        episodes_without_rewards: List[Episode],
+        iteration: Optional[int] = None
     ) -> Tuple[List[Episode], Dict[str, Any]]:
         raise NotImplementedError
