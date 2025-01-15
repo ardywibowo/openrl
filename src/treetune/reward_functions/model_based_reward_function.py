@@ -109,13 +109,14 @@ class ModelBasedRewardFunction(RewardFunction):
             Episode(
                 query_token_ids=e.query_token_ids,
                 response_token_ids=e.response_token_ids,
+                query_text=e.query_text,
+                response_text=e.response_text,
                 scores=reward if e.scores is None else e.scores,
             )
             for reward, e in zip(rewards, episodes)
         ]
         
-        metrics = {}
-        return episodes_with_reward, metrics
+        return episodes_with_reward
 
     def _init_reward_model_pipeline(
         self,

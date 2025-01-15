@@ -333,15 +333,17 @@ class KLWithReferenceAnalyzer(Analyzer):
 
                         # Truncate the response
                         response_token_ids = response_token_ids[
-                                             : self.max_sequence_length - len(query_token_ids)
-                                             ]
+                            :self.max_sequence_length - len(query_token_ids)
+                        ]
                         reward = self.reward_function.get_unfinished_response_penalty()
                         is_unfinished_response = True
 
                 episode = Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
-                    scores=reward,
+                    query_text=query_text,
+                    response_text=response_text,
+                    scores=reward
                 )
 
                 episodes_dict.setdefault(idx, []).append(episode)

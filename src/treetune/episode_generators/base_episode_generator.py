@@ -223,6 +223,8 @@ class EmptyEpisodeGenerator(EpisodeGenerator):
                 Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=self.tokenizer.decode(query_token_ids),
+                    response_text=self.tokenizer.decode(response_token_ids),
                     reward=reward,
                     advantages=advantages,
                 )
@@ -258,6 +260,8 @@ class DebugFileEpisodeGenerator(EpisodeGenerator):
                 Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=self.tokenizer.decode(query_token_ids),
+                    response_text=self.tokenizer.decode(response_token_ids),
                     reward=reward,
                 )
             )

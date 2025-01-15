@@ -400,6 +400,8 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
                 reward=reward,
                 query_token_ids=query_token_ids,
                 response_token_ids=response_token_ids,
+                query_text=query_text,
+                response_text=response_text,
                 advantages=advantages,
             )
 
@@ -538,6 +540,8 @@ class TreeEpisodeGeneratorForMath(TreeEpisodeGenerator):
                 reward=reward,
                 query_token_ids=query_token_ids,
                 response_token_ids=response_token_ids,
+                query_text=query_text,
+                response_text=response_text,
                 advantages=[1] * len(response_token_ids),
             )
 

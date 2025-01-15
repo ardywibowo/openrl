@@ -216,6 +216,8 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             episode = Episode(
                 query_token_ids=traj["query_token_ids"],
                 response_token_ids=traj["response_token_ids"],
+                query_text=traj["query_text"],
+                response_text=traj["response_text"],
                 scores=traj["score"],
                 advantages=self._compute_token_advantages(traj),
             )

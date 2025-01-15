@@ -5,6 +5,10 @@ from typing import List, Optional
 class Episode:
     query_token_ids: List[int]
     response_token_ids: List[int]
+    
+    query_text: str = None
+    response_text: str = None
+    
     reward: float = None  # Kept for backward compatibility
     scores: float = None
     advantages: Optional[List[float]] = None

@@ -73,8 +73,13 @@ class MATHRewardFunction(RewardFunction):
         metrics = {}
         if self.penalize_unfinished_response:
             metrics = self.record_num_unfinished_responses(episodes_with_rewards)
+            
+            self._cloud_log({
+                **metrics,
+                "train/global_iteration": iteration
+            })
         
-        return episodes_with_rewards, metrics
+        return episodes_with_rewards
     
     def record_num_unfinished_responses(self, episodes: int):
         num_unfinished = sum(

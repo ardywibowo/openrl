@@ -27,7 +27,10 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
     ):
         super().__init__(**kwargs)
         self.reward_function = reward_function.construct(
+            seed=self.seed,
             distributed_state=self.distributed_state,
+            cloud_logger=self.cloud_logger,
+            exp_root=self.exp_root,
             tokenizer=self.tokenizer
         )
         self.append_bos_to_query = append_bos_to_query
@@ -37,35 +40,20 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         self, inference_results: Dataset, iteration: int
     ) -> List[Union[Dict[str, Any], Episode]]:
         episodes_without_rewards = []
-        instances = []
-        paths = []
         for instance in inference_results:
-            episodes, curr_instances, curr_paths = self._convert_to_episodes(instance)
+            episodes = self._convert_to_episodes(instance)
             episodes_without_rewards.extend(episodes)
-            instances.extend(curr_instances)
-            paths.extend(curr_paths)
         
-        episodes, metrics = self.reward_function.batch_compute_rewards(
+        episodes = self.reward_function.batch_compute_rewards(
             episodes_without_rewards, iteration)
-        self._cloud_log({
-            **metrics,
-            "train/global_iteration": iteration
-        })
 
         return episodes
 
     def _convert_to_episodes(self, instance: Dict[str, Any]) -> List[Episode]:
         tree = json.loads(instance["_treetune__reasoning_tree"])
         paths = self.extract_paths_from_tree(tree)
-
-        episodes = []
-        instances = []
-        for path in paths:
-            episodes.append(self._convert_path_to_episode(instance, path))
-            instances.append(instance)
-            paths.append(path)
-
-        return episodes, instances, paths
+        
+        return [self._convert_path_to_episode(instance, path) for path in paths]
 
     def _convert_path_to_episode(
         self, instance: Dict[str, Any], path: Dict[str, Any]
@@ -94,6 +82,8 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         episode = Episode(
             query_token_ids=query_token_ids,
             response_token_ids=response_token_ids,
+            query_text=query_text,
+            response_text=response_text,
             scores=None,
         )
         return episode

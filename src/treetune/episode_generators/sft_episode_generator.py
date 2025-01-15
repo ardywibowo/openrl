@@ -148,6 +148,8 @@ class SFTEpisodeGenerator(EpisodeGenerator):
         return Episode(
             query_token_ids=query_token_ids,
             response_token_ids=response_token_ids,
+            query_text=query,
+            response_text=response,
             reward=1.0,
             advantages=advantages,
         )

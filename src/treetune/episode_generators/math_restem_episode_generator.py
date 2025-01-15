@@ -140,6 +140,8 @@ class MATHRestEMEpisodeGenerator(MathEpisodeGenerator):
                 episode = Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=query_text,
+                    response_text=response_text,
                     scores=float(reward),
                 )
                 if not filter_by_reward_threshold or reward >= reward_threshold:
