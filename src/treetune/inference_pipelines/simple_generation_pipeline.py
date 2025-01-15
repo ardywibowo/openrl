@@ -76,15 +76,6 @@ class SimpleGenerationPipeline(InferencePipeline, TreeEpisodeUtils):
         self.tokenizer = tokenizer
 
     def generate(self, sequences: List[str], iteration: int) -> Dataset:
-        """
-        Main entry point for generating inference outputs (episodes) from input sequences.
-        
-        Steps:
-          1. Prepare a sharded dataset (for this process).
-          2. Run inference using vLLM and get the results.
-          3. Convert inference results to episodes, save them, and collect stats.
-          4. Merge shards on the main process, optionally save to cloud, and clean up.
-        """
         # 1. Prepare the dataset shard
         dataset_shard, temp_dir, results_dir, seed = self._prepare_sharded_dataset(
             sequences, iteration
@@ -102,17 +93,16 @@ class SimpleGenerationPipeline(InferencePipeline, TreeEpisodeUtils):
 
         logger.info(f"Process {self.distributed_state.process_index} finished inference.")
 
-        # 3. Convert inference results to episodes, save them, log vLLM stats
+        # 3. Convert inference results to episodes and save them.
         self._convert_and_save_episodes(
             infer_results=infer_results,
-            temp_dir=temp_dir,
-            metrics=metrics
+            temp_dir=temp_dir
         )
 
-        # Log intermediate metrics (timing, vLLM stats, etc.)
+        # Log intermediate metrics (including vLLM stats already inserted)
         self._cloud_log(metrics)
 
-        # 4. Merge shards if main process, then optionally save to cloud and clean up
+        # 4. Merge shards if main process, etc.
         episodes = self._merge_episode_shards(temp_dir)
         see_memory_usage("After generating episodes", force=True)
 
@@ -121,6 +111,101 @@ class SimpleGenerationPipeline(InferencePipeline, TreeEpisodeUtils):
 
         self.distributed_state.wait_for_everyone()
         return episodes
+
+    def _run_inference_with_vllm(
+        self,
+        dataset_shard: Dataset,
+        results_dir: Path,
+        seed: int,
+        iteration: int
+    ) -> Tuple[Dataset, Dict[str, float]]:
+        """
+        Initializes the vLLM server for this process, runs inference, handles cleanup,
+        then computes and logs vLLM stats.
+        """
+        metrics: Dict[str, float] = {}
+
+        # 1) Check GPU memory usage and define cleanup
+        device = self.distributed_state.device
+        release_memory()
+        gpu_memory_before_mb = get_gpu_memory()[device.index]
+
+        def vllm_cleanup_fn():
+            if self.wait_until_memory_release:
+                threshold_mb = gpu_memory_before_mb * 1.1  # 10% tolerance
+                wait_for_memory_release(device.index, threshold_mb=threshold_mb)
+
+        # 2) Initialize and run inference
+        vllm_init_fn = self._get_vllm_init_fn(
+            results_dir=results_dir,
+            hf_ckpt_path_or_model=self.model_name_or_path,
+            process_index=self.distributed_state.process_index,
+            seed=seed
+        )
+        infer_results = self._run_inference(
+            dataset_shard=dataset_shard,
+            vllm_init_fn=vllm_init_fn,
+            vllm_cleanup_fn=vllm_cleanup_fn,
+            results_root_dir=results_dir,
+            seed=seed,
+            iteration=iteration,
+        )
+
+        # 3) Once inference is done and server is stopped, compute vLLM stats (main process only)
+        self._compute_and_log_vllm_stats(results_dir, metrics)
+
+        return infer_results, metrics
+
+    def _convert_and_save_episodes(
+        self,
+        infer_results: Dataset,
+        temp_dir: Path
+    ) -> None:
+        """
+        Converts inference results into InferenceOutput objects, then saves them to disk.
+        """
+        process_index = self.distributed_state.process_index
+        shard_dir = temp_dir / "episodes" / f"shard_{process_index:02d}"
+        shard_dir.mkdir(parents=True, exist_ok=True)
+
+        # Convert results to episodes
+        episodes_list = [
+            self._convert_to_dict(e)
+            for e in self._convert_results_to_inference_output(infer_results)
+        ]
+        episodes_ds_shard = Dataset.from_list(episodes_list)
+        episodes_ds_shard.save_to_disk(shard_dir)
+
+        del episodes_ds_shard
+        release_memory()
+
+    def _compute_and_log_vllm_stats(
+        self,
+        results_dir: Path,
+        metrics: Dict[str, float]
+    ) -> None:
+        """
+        If main process, parse vLLM logs from `results_dir / vllm_server.log`
+        and update the metrics dict.
+        """
+        if not self.distributed_state.is_main_process:
+            return
+        try:
+            log_path = results_dir / "vllm_server.log"
+            vllm_stats = compute_vllm_stats(log_path)
+        except Exception as e:
+            logger.error(f"Error while computing vLLM stats: {e}")
+            vllm_stats = {}
+
+        if "avg_generation_throughput" in vllm_stats:
+            vllm_stats["total_approx_generation_throughput"] = (
+                vllm_stats["avg_generation_throughput"] 
+                * self.distributed_state.num_processes
+            )
+
+        vllm_stats = {f"vllm_stats/{k}": round(v, 2) for k, v in vllm_stats.items()}
+        logger.info(f"vLLM Stats: {vllm_stats}")
+        metrics.update(vllm_stats)
 
     def _prepare_sharded_dataset(
         self, sequences: List[str], iteration: int
@@ -166,101 +251,6 @@ class SimpleGenerationPipeline(InferencePipeline, TreeEpisodeUtils):
         )
 
         return dataset_shard, temp_dir, results_dir, seed
-
-    def _run_inference_with_vllm(
-        self,
-        dataset_shard: Dataset,
-        results_dir: Path,
-        seed: int,
-        iteration: int
-    ) -> Tuple[Dataset, Dict[str, float]]:
-        """
-        Initializes the vLLM server for this process, runs inference, and handles cleanup.
-        
-        Returns:
-            infer_results (Dataset): The raw inference results from the strategy.
-            metrics (Dict[str, float]): A dictionary for accumulating timing/memory stats.
-        """
-        metrics: Dict[str, float] = {}
-
-        # Track GPU memory usage
-        device = self.distributed_state.device
-        release_memory()
-        gpu_memory_before_mb = get_gpu_memory()[device.index]
-
-        # Build a cleanup function to wait for memory to release (if requested)
-        def vllm_cleanup_fn():
-            if self.wait_until_memory_release:
-                threshold_mb = gpu_memory_before_mb * 1.1  # 10% tolerance
-                wait_for_memory_release(device.index, threshold_mb=threshold_mb)
-
-        # Initialize vLLM
-        vllm_init_fn = self._get_vllm_init_fn(
-            results_dir=results_dir,
-            hf_ckpt_path_or_model=self.model_name_or_path,
-            process_index=self.distributed_state.process_index,
-            seed=seed
-        )
-
-        # Run the actual inference
-        infer_results = self._run_inference(
-            dataset_shard=dataset_shard,
-            vllm_init_fn=vllm_init_fn,
-            vllm_cleanup_fn=vllm_cleanup_fn,
-            results_root_dir=results_dir,
-            seed=seed,
-            iteration=iteration,
-        )
-
-        return infer_results, metrics
-
-    def _convert_and_save_episodes(
-        self,
-        infer_results: Dataset,
-        temp_dir: Path,
-        metrics: Dict[str, float]
-    ) -> None:
-        """
-        Converts inference results into episodes, saves them, 
-        and logs vLLM stats if this is the main process.
-        """
-        process_index = self.distributed_state.process_index
-        shard_dir = temp_dir / "episodes" / f"shard_{process_index:02d}"
-        shard_dir.mkdir(parents=True, exist_ok=True)
-
-        # Convert results to episodes
-        episodes_list = [
-            self._convert_to_dict(e)
-            for e in self._convert_results_to_inference_output(infer_results)
-        ]
-        episodes_ds_shard = Dataset.from_list(episodes_list)
-        episodes_ds_shard.save_to_disk(shard_dir)
-
-        del episodes_ds_shard
-        release_memory()
-
-        # Collect vLLM stats if main process
-        if self.distributed_state.is_main_process:
-            try:
-                # Locate the correct log file for the current rank
-                log_path = (temp_dir / "results" / f"process_{process_index:02d}" 
-                            / "vllm_server.log")
-                vllm_stats = compute_vllm_stats(log_path)
-            except Exception as e:
-                logger.error(f"Error while computing vLLM stats: {e}")
-                vllm_stats = {}
-
-            # Optionally aggregate total throughput across processes
-            if "avg_generation_throughput" in vllm_stats:
-                vllm_stats["total_approx_generation_throughput"] = (
-                    vllm_stats["avg_generation_throughput"]
-                    * self.distributed_state.num_processes
-                )
-
-            # Prefix and round stats
-            vllm_stats = {f"vllm_stats/{k}": round(v, 2) for k, v in vllm_stats.items()}
-            logger.info(f"vLLM Stats: {vllm_stats}")
-            metrics.update(vllm_stats)
 
     def _merge_episode_shards(self, temp_dir: Path) -> Dataset:
         """
