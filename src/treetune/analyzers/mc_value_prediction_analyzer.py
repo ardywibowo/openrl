@@ -29,7 +29,7 @@ class MCValuePredictionAnalyzer(ValNetPredictionAnalyzer):
         checkpoint_dir = self.runtime.exp_root / "checkpoints"
         checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
-        trajectory_dir = self.runtime.exp_root / "temp_episodes"
+        trajectory_dir = self.runtime.exp_root / "episode_generator" / "temp_episodes"
         trajectory_dir.mkdir(exist_ok=True, parents=True)
 
         # noinspection PyProtectedMember

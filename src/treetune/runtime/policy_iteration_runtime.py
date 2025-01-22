@@ -23,7 +23,7 @@ from treetune.common.notebook_utils import get_repo_dir
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
-from treetune.inference_pipelines.base_inference_pipeline import InferencePipeline
+from treetune.pipelines.base_pipeline import Pipeline
 from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
 from treetune.runtime.base_runtime import DistributedRuntime, Runtime
@@ -111,7 +111,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             num_episodes_per_iteration=self.num_episodes_per_iteration,
             debug=self.debug_mode,
             cloud_logger=self.cloud_logger,
-            exp_root=self.exp_root,
+            root_dir=self.exp_root / "episode_generator",
             seed=self.global_vars["seed"],
         )
         # Handle the case where we are precomputing episodes from an offline inference result
@@ -310,12 +310,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         evaluation_root_dir = self.exp_root / "evaluation"
         evaluation_root_dir.mkdir(exist_ok=True, parents=True)
 
-        checkpoint_dir = self.exp_root / "checkpoints"
-        checkpoint_dir.mkdir(exist_ok=True, parents=True)
-
-        ckpts = self._get_list_of_evaluation_checkpoints(
-            checkpoint_dir, every_n_checkpoints
-        )
+        ckpts = self._get_list_of_evaluation_checkpoints(every_n_checkpoints)
         logger.info(
             f"Running evaluation on {len(ckpts)} checkpoints "
             f"(since every_n_checkpoints = {every_n_checkpoints})."
@@ -363,7 +358,7 @@ class PolicyIterationRuntime(DistributedRuntime):
                 infer_pipeline_root_dir = eval_dir / inference_name
                 infer_pipeline_root_dir.mkdir(exist_ok=True, parents=True)
 
-                infer_pipeline = InferencePipeline.from_params(
+                infer_pipeline = Pipeline.from_params(
                     Params(pipeline_cfg),
                     tokenizer=self.tokenizer,
                     seed=2746318213,
@@ -394,15 +389,14 @@ class PolicyIterationRuntime(DistributedRuntime):
 
         # Mark the evaluation as done only if all checkpoints are done
         # The launcher infrastructure uses this to determine if evaluation is needed to be launched
-        is_training_finished = (checkpoint_dir / "final").exists()
+        is_training_finished = (self.exp_root / "final").exists()
         if not is_training_finished:
             logger.info(
                 "Skipping marking evaluation as done because training is not finished"
             )
             return
 
-        all_eval_ckpts = self._get_list_of_evaluation_checkpoints(
-            checkpoint_dir, every_n_checkpoints, ignore_worker_vars=True
+        all_eval_ckpts = self._get_list_of_evaluation_checkpoints(every_n_checkpoints, ignore_worker_vars=True
         )
         logger.info(f"All evaluation checkpoints: {all_eval_ckpts}")
         all_ckpts_are_done = all(
@@ -472,9 +466,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         checkpoint_dir = self.exp_root / "checkpoints"
         checkpoint_dir.mkdir(exist_ok=True, parents=True)
 
-        checkpoints_to_keep = self._get_list_of_evaluation_checkpoints(
-            checkpoint_dir, keep_every_n_checkpoints
-        )
+        checkpoints_to_keep = self._get_list_of_evaluation_checkpoints(keep_every_n_checkpoints)
 
         logger.info(
             f"Only keeping {len(checkpoints_to_keep)} checkpoints "
@@ -506,14 +498,14 @@ class PolicyIterationRuntime(DistributedRuntime):
                     )
                     logger.info("Continuing...")
 
-    @staticmethod
     def _get_list_of_evaluation_checkpoints(
-        checkpoint_dir: Path, every_n_checkpoints: int, ignore_worker_vars: bool = False
+        self, every_n_checkpoints: int, ignore_worker_vars: bool = False
     ) -> List[Path]:
         # Get all items in the directory that are directories
         ckpts = [
             file
-            for file in checkpoint_dir.iterdir()
+            for iter_dir in self.exp_root
+            for file in (iter_dir / "checkpoints").iterdir()
             if file.is_dir() and file.name.startswith("ckpt--")
         ]
         ckpts = sorted(ckpts, key=lambda x: PolicyTrainer.parse_checkpoint_name(x.name))
@@ -587,7 +579,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             infer_pipeline_root_dir = eval_dir / inference_name
             infer_pipeline_root_dir.mkdir(exist_ok=True, parents=True)
 
-            infer_pipeline = InferencePipeline.from_params(
+            infer_pipeline = Pipeline.from_params(
                 Params(pipeline_cfg),
                 tokenizer=self.tokenizer,
                 seed=self.global_vars["seed"],

@@ -16,9 +16,6 @@ local sampling_temperature = 0.6;
 + (import 'trainers/dpo_positive_MATH.jsonnet')
 + {
     episode_generator+: {
-        vllm_server+: {
-            swap_space: 8,
-        },
         // Override the task
         type: "math_dpo_positive_episode_generator",
         reward_threshold: 0.5,
@@ -27,52 +24,59 @@ local sampling_temperature = 0.6;
         reward_function+: { math_task: $.episode_generator.task },
         reasoning_step_delimiter: '',
         answer_prefix: null,
-
+        
         initial_model_name_or_path: hf_model_name,
-
-        dataset_sample_with_replacement: false,
-        dataset_portion: 0.01,
-        total_num_iterations: total_num_iterations,
-
+        
         max_sequence_length: 2499,
         save_generations_every_n_iteration: 50,
+        
+        dataset_pipeline+: {
+            sample_with_replacement: false,
+            dataset_portion: 0.01,
+            total_num_iterations: total_num_iterations,
+        },
+        
+        generation_pipeline+: {
+            vllm_server+: {
+                swap_space: 8,
+            },
+            inference_strategy: {
+                type: 'cot',
 
-        inference_strategy: {
-            type: 'cot',
+                max_concurrent_programs: 128,
+                max_concurrent_generations: 64,
 
-            max_concurrent_programs: 128,
-            max_concurrent_generations: 64,
+                samples: num_rollouts_per_sample,
+                max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
-            samples: num_rollouts_per_sample,
-            max_depth: 100,  // Deprecated parameter. Doesn't do anything.
+                node_expander: {
+                    type: 'efficient_iid',
+                    program: $.prompt_library.tree.expansion.iid,
+                    program_kwargs+: {
+                        temperature: sampling_temperature,
+                        top_p: 0.9,
+                        max_tokens: 1024,
+                        stop: '"\n\n\nProblem:"',
+                    },
+                    node_text_template: '{chain_of_thought}',
 
-            node_expander: {
-                type: 'efficient_iid',
-                program: $.prompt_library.tree.expansion.iid,
-                program_kwargs+: {
-                    temperature: sampling_temperature,
-                    top_p: 0.9,
-                    max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                    // Needed to compute max_tokens on the fly
+                    model_context_size: 4095,
+                    tokenizer: $.tokenizer,
                 },
-                node_text_template: '{chain_of_thought}',
 
-                // Needed to compute max_tokens on the fly
-                model_context_size: 4095,
-                tokenizer: $.tokenizer,
+                answer_extractor: {
+                    type: 'identity',
+                    node_key_name: 'text',
+                },
+
+                guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-MATH-v2.jsonnet') + { api_base: 'none' },
+
+                question_field: 'query',
+                question_template: $.prompt_library.tree.question_template,
+
+                no_cache: false,
             },
-
-            answer_extractor: {
-                type: 'identity',
-                node_key_name: 'text',
-            },
-
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-MATH-v2.jsonnet') + { api_base: 'none' },
-
-            question_field: 'query',
-            question_template: $.prompt_library.tree.question_template,
-
-            no_cache: false,
         },
     },
 

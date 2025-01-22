@@ -280,3 +280,4 @@ configs/.wandb_api_key.json
 /results/inference_results/
 /cached_inference_results/
 private/
+typings/

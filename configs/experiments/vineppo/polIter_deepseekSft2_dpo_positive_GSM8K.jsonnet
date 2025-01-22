@@ -9,9 +9,10 @@ local task = (import 'tasks/gsm8k_orig_format.jsonnet');
         reward_function+: { math_task: $.episode_generator.task },
 
         initial_model_name_or_path: hf_model_name,
-
-        inference_strategy+: {
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
+        generation_pipeline+: {
+            inference_strategy+: {
+                guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
+            },
         },
     },
 }

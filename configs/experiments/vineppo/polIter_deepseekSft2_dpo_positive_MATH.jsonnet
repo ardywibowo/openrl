@@ -2,8 +2,9 @@
 +
 {
     episode_generator+: {
-        dataset_portion: 1.0, # just change to full dataset
-    }
+        dataset_pipeline+: {
+            dataset_portion: 1.0, # just change to full dataset
+    },
 }
 + (import 'trainers/64_samples.jsonnet')
 + (import 'episode_generators/dpo_positive/maxpair_64.jsonnet')

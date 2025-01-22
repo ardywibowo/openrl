@@ -7,39 +7,41 @@ local gsm8k_inference_pipeline =
     + (import 'inference_strategies/tree/iid_expander.jsonnet')
     + (import 'inference_strategies/cot.jsonnet')
     + {
-        inference_strategy+: {
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 128,
+        generation_pipeline+: {
+            inference_strategy+: {
+                max_concurrent_programs: 512,
+                max_concurrent_generations: 128,
 
-            node_expander+: {
-                type: 'efficient_iid',
-                program_kwargs: {
-                    temperature: 0.35,
-                    top_p: 0.9,
-                    max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                node_expander+: {
+                    type: 'efficient_iid',
+                    program_kwargs: {
+                        temperature: 0.35,
+                        top_p: 0.9,
+                        max_tokens: 1024,
+                        stop: '"\n\n\nProblem:"',
+                    },
+                    node_text_template: '{chain_of_thought}',
+
+                    // Needed to compute max_tokens on the fly
+                    model_context_size: 2047,
+                    tokenizer: {
+                        type: 'pretrained',
+                        hf_model_name: hf_model_name,
+                    },
                 },
-                node_text_template: '{chain_of_thought}',
-
-                // Needed to compute max_tokens on the fly
-                model_context_size: 2047,
-                tokenizer: {
-                    type: 'pretrained',
-                    hf_model_name: hf_model_name,
+                answer_extractor+: {
+                    type: 'identity',
+                    node_key_name: 'text',
                 },
-            },
-            answer_extractor+: {
-                type: 'identity',
-                node_key_name: 'text',
-            },
-            samples: 16,
-            max_depth: 10,
+                samples: 16,
+                max_depth: 10,
 
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
-            no_cache: false,
-            question_field: 'query',
+                guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
+                no_cache: false,
+                question_field: 'query',
 
-            seed: 42,
+                seed: 42,
+            },
         },
         task: (import 'tasks/gsm8k_orig_format.jsonnet'),
         analyzers: [(import 'analyzers/task_performance.jsonnet')],

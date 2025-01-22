@@ -137,6 +137,8 @@ class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
                 episode = Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=query_text,
+                    response_text=response_text,
                     scores=float(reward),
                 )
 

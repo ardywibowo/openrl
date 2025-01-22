@@ -37,27 +37,25 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
     def _run_inference(
         self,
         dataset_shard: Dataset,
-        vllm_init_fn: Callable[[], Tuple[VLLMServer, Dict[str, Any]]],
-        vllm_cleanup_fn: Callable[[], None],
         results_root_dir: Path,
         seed: int,
         iteration: int,
     ):
-        vllm_server_ptr, guidance_llm_kwargs_ptr = [], []
+        # vllm_server_ptr, guidance_llm_kwargs_ptr = [], []
 
-        def get_vllm_server():
-            if len(vllm_server_ptr) == 0:
-                out = vllm_init_fn()
-                vllm_server_ptr.append(out[0])
-                guidance_llm_kwargs_ptr.append(out[1])
+        # def get_vllm_server():
+        #     if len(vllm_server_ptr) == 0:
+        #         out = vllm_init_fn()
+        #         vllm_server_ptr.append(out[0])
+        #         guidance_llm_kwargs_ptr.append(out[1])
 
-            return vllm_server_ptr[0], guidance_llm_kwargs_ptr[0]
+        #     return vllm_server_ptr[0], guidance_llm_kwargs_ptr[0]
 
-        def kill_vllm_server():
-            if len(vllm_server_ptr) > 0:
-                vllm_server_ptr[0].stop_server()
-                vllm_server_ptr.pop()
-                guidance_llm_kwargs_ptr.pop()
+        # def kill_vllm_server():
+        #     if len(vllm_server_ptr) > 0:
+        #         vllm_server_ptr[0].stop_server()
+        #         vllm_server_ptr.pop()
+        #         guidance_llm_kwargs_ptr.pop()
 
         def try_loading_inference_results(results_path: Path) -> Optional[Dataset]:
             logger.info(f"Always generating from scratch")
@@ -129,11 +127,6 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
 
             self.distributed_state.wait_for_everyone()
             unique_results = Dataset.load_from_disk(str(val_est_result_path))
-
-        kill_vllm_server()
-        release_memory()
-        vllm_cleanup_fn()
-        release_memory()
 
         if len(metrics) > 0:
             self._cloud_log(metrics)
@@ -216,6 +209,8 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             episode = Episode(
                 query_token_ids=traj["query_token_ids"],
                 response_token_ids=traj["response_token_ids"],
+                query_text=traj["query_text"],
+                response_text=traj["response_text"],
                 scores=traj["score"],
                 advantages=self._compute_token_advantages(traj),
             )

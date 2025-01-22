@@ -32,7 +32,7 @@ from treetune.common.deepspeed_utils import (
     prepare_data_loader_for_training,
 )
 from treetune.common.wandb_utils import get_repo_dir
-from treetune.inference_pipelines import InferencePipeline
+from treetune.pipelines import Pipeline
 from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
 from treetune.trainers.arguments import TrainingArguments
