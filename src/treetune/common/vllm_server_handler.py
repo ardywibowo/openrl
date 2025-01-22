@@ -6,17 +6,16 @@ from typing import Any, Callable, Dict, Optional, Tuple, Union
 import torch
 from accelerate.utils import release_memory
 
-from .lazy import Lazy
 from .component import Component
 from .gpu_utils import get_gpu_memory, wait_for_memory_release
+from .lazy import Lazy
+from .logging_utils import get_logger
 from .py_utils import find_n_free_ports
 from .vllm_server import VLLMServer, compute_vllm_stats
-from ..logging_utils import get_logger
-from . import FromParams
 
 logger = get_logger(__name__)
 
-class VLLMServerHandler(Component, FromParams):
+class VLLMServerHandler(Component):
     def __init__(
         self,
         vllm_server: Lazy[VLLMServer],

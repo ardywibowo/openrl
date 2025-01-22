@@ -19,14 +19,14 @@ from transformers import (BatchEncoding, Pipeline, PreTrainedModel,
                           PreTrainedTokenizer, pipeline)
 
 from treetune.common import Lazy
+from treetune.common.logging_utils import get_logger
 from treetune.episode_generators.base_episode_generator import (
     Episode, EpisodeGenerator)
-from treetune.reward_functions import RewardFunction
 from treetune.episode_generators.on_policy_episode_generator import \
     OnPolicyEpisodeGenerator
 from treetune.episode_generators.tree_episode_generator import TreeEpisodeUtils
-from treetune.logging_utils import get_logger
 from treetune.models import Model
+from treetune.reward_functions import RewardFunction
 from treetune.tasks import GSM8K, Task
 from treetune.tasks.math import MATH
 from treetune.tokenization_utils import Tokenizer

@@ -1,15 +1,15 @@
 import json
 import uuid
-from typing import Any, Dict, List, Union, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import evaluate
 import numpy as np
 from datasets import Dataset
 
-from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators import EpisodeGeneratorWithRewardFunction
+from treetune.common.logging_utils import get_logger
+from treetune.episode_generators import (EpisodeGenerator,
+                                         EpisodeGeneratorWithRewardFunction)
 from treetune.episodes import Episode
-from treetune.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

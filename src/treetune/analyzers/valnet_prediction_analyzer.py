@@ -12,7 +12,7 @@ from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy
 from treetune.common.py_utils import need_to_minimize_stored_files

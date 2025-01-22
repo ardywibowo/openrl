@@ -3,12 +3,13 @@ from pathlib import Path
 from typing import Optional
 
 import torch
-from transformers import PreTrainedModel, AutoModelForCausalLM, AutoConfig, AutoModel
+from transformers import (AutoConfig, AutoModel, AutoModelForCausalLM,
+                          PreTrainedModel)
 from transformers.trainer_pt_utils import get_model_param_count
 
-from treetune.common import JsonDict, FromParams
+from treetune.common import FromParams, JsonDict
+from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import is_flash_attention_available
-from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
 
 logger = get_logger(__name__)
@@ -194,11 +195,9 @@ class DIPreTrainedModelForCasualLM(Model, PreTrainedModel):
         if "llama" not in hf_model_name.lower():
             raise ValueError("Only llama models are supported for now")
 
+        from flash_attn.models.llama import (llama_config_to_gpt2_config,
+                                             remap_state_dict_hf_llama)
         from flash_attn.utils.pretrained import state_dict_from_pretrained
-        from flash_attn.models.llama import (
-            llama_config_to_gpt2_config,
-            remap_state_dict_hf_llama,
-        )
 
         config = llama_config_to_gpt2_config(
             AutoConfig.from_pretrained(hf_model_name, trust_remote_code=True)

@@ -1,6 +1,5 @@
 from treetune.common import Registrable
-
-from treetune.logging_utils import get_logger
+from treetune.common.logging_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -6,7 +6,7 @@ from datasets import Dataset
 from deepspeed import DeepSpeedEngine
 from transformers import PreTrainedModel
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers.action_ranking_analyzer import ActionRankingAnalyzer
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy

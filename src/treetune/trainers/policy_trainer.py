@@ -3,32 +3,27 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, List
-from typing import Union
+from typing import List, Optional, Tuple, Union
 
 import deepspeed
 import torch
 from accelerate import Accelerator, PartialState
-from accelerate.utils import GradientAccumulationPlugin, DummyOptim, DummyScheduler
+from accelerate.utils import (DummyOptim, DummyScheduler,
+                              GradientAccumulationPlugin)
 from datasets import Dataset
 from peft import PeftModel
 from torch import nn
-from transformers import (
-    AutoModelForCausalLM,
-    get_scheduler,
-    DataCollator,
-)
+from transformers import AutoModelForCausalLM, DataCollator
 from transformers import Trainer as HfTrainer
+from transformers import get_scheduler
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 from transformers.trainer_pt_utils import get_parameter_names
 from transformers.trainer_utils import TrainerMemoryTracker, set_seed
 from wandb.sdk.wandb_run import Run as WandbRun
 
 from treetune.common import JsonDict
-from treetune.common.py_utils import (
-    is_flash_attention_model,
-)
-from treetune.logging_utils import get_logger
+from treetune.common.logging_utils import get_logger
+from treetune.common.py_utils import is_flash_attention_model
 from treetune.models.base_model import Model
 from treetune.trainers.arguments import TrainingArguments
 from treetune.trainers.base_trainer import Trainer
@@ -131,7 +126,8 @@ class PolicyTrainer(Trainer):
         self.deepspeed_plugin = None
         if deepspeed_config is not None:
             self.args.world_size = distributed_state.num_processes
-            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+            from transformers.integrations.deepspeed import \
+                HfTrainerDeepSpeedConfig
 
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(deepspeed_config)
             self.hf_deepspeed_config.trainer_config_process(self.args)
@@ -436,13 +432,15 @@ class PolicyTrainer(Trainer):
         )
 
         if self.is_deepspeed_enabled:
-            from deepspeed.utils import logger as ds_logger
             import logging
+
+            from deepspeed.utils import logger as ds_logger
 
             ds_logger.setLevel(logging.DEBUG)
 
             if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+                from transformers.integrations.deepspeed import \
+                    HfTrainerDeepSpeedConfig
 
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 

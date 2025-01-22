@@ -5,12 +5,10 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from datasets import Dataset, DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 from treetune.tasks.math_answer_extraction import (
-    extract_math_minerva_few_shot_cot_answer,
-    extract_math_answer,
-)
+    extract_math_answer, extract_math_minerva_few_shot_cot_answer)
 from treetune.tasks.math_grader import grade_answer
 from treetune.tasks.math_grader_minerva import eval_math
 from treetune.tokenization_utils import Tokenizer
@@ -426,7 +424,8 @@ class MATH(Task):
     def _split_solution_into_intermediate_steps_minerva(
         self, solution: str
     ) -> List[int]:
-        from treetune.tasks.math_extract_steps_inplace import split_solution_inplace
+        from treetune.tasks.math_extract_steps_inplace import \
+            split_solution_inplace
 
         if self.answer_prefix is None:
             return split_solution_inplace(solution)

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from datasets import Dataset, DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 from treetune.tokenization_utils import Tokenizer
 

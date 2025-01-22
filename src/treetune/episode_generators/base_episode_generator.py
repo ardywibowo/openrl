@@ -1,21 +1,19 @@
 import json
 import random
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List, Optional, Union, Callable, Dict, Any
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import wandb
 from accelerate import PartialState
 from datasets import Dataset
 from wandb.sdk.wandb_run import Run
 
-from treetune.common import Lazy
-from treetune.common import Registrable
-from treetune.common import Component
-from treetune.inference_strategies import InferenceStrategy
-from treetune.logging_utils import get_logger
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Component, Lazy, Registrable
+from treetune.common.logging_utils import get_logger
 from treetune.episodes import Episode
+from treetune.inference_strategies import InferenceStrategy
+from treetune.tokenization_utils.base_tokenizer import Tokenizer
 
 logger = get_logger(__name__)
 
@@ -24,7 +22,7 @@ class EpisodeGeneratorStrategy(Registrable):
         raise NotImplementedError
 
 
-class EpisodeGenerator(Registrable, Component):
+class EpisodeGenerator(Component):
     can_precompute_episodes: bool = False
     support_distributed: bool = False
 

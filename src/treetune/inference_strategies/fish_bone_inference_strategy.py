@@ -6,7 +6,7 @@ from datasets import Dataset
 
 import guidance
 from guidance.llms import OpenAI, OpenAIVLLM
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.common import guidance_utils as gu, Registrable, Lazy
 from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
 from treetune.inference_strategies.tree_inference import Node

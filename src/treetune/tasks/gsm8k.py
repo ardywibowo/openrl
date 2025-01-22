@@ -2,12 +2,9 @@ import re
 from collections import Counter
 from typing import Any, Dict, List, Optional
 
-from datasets import (
-    Dataset,
-    DatasetDict,
-)
+from datasets import Dataset, DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 
 logger = logging_utils.get_logger(__name__)

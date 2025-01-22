@@ -7,7 +7,7 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional, Union, List, Dict, Any, Tuple, Callable
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch.cuda
 from accelerate.utils import release_memory
@@ -15,12 +15,13 @@ from datasets import Dataset, concatenate_datasets
 
 from treetune.common import Lazy
 from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
+from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import find_n_free_ports
 from treetune.common.vllm_server import VLLMServer, compute_vllm_stats
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.episodes import Episode
-from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
-from treetune.logging_utils import get_logger
+from treetune.inference_strategies.base_inference_strategy import \
+    InferenceStrategy
 from treetune.tasks.base_task import Task
 
 logger = get_logger(__name__)
@@ -100,7 +101,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
 
         if temp_dir_root is None:
             self.temp_dir_root = self.root_dir / "temp_episodes"
-            self._log_on_main(f"Using default temp_dir_root: {self.temp_dir_root}")
+            self._log_on_main(logger, f"Using default temp_dir_root: {self.temp_dir_root}")
         else:
             self.temp_dir_root = Path(temp_dir_root)
         self.temp_dir_root.mkdir(parents=True, exist_ok=True)
@@ -134,13 +135,9 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             f"Rank {self.distributed_state.process_index} using vLLM port {self._vllm_port}"
         )
 
-    def _log_on_main(self, msg, level="info"):
-        if self.is_main_process() and self._logger is not None:
-            getattr(self._logger, level)(msg)
-
     def _init_orig_ds(self):
         ds = self.task.get_datasets(self.dataset_split)
-        self._log_on_main(f"Initial Dataset Size: {len(ds)}")
+        self._log_on_main(logger, f"Initial Dataset Size: {len(ds)}")
         ds = self._filter_init_dataset(ds)
 
         self.initial_ds_after_filter_size = len(ds)
@@ -151,12 +148,14 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 range(self.dataset_initial_size)
             )
             self._log_on_main(
+                logger,
                 f"Dataset Size after initial selection: {len(self._orig_ds)}"
             )
 
         if not self.dataset_sample_with_replacement:
             # Create the dataset once on all processes
             self._log_on_main(
+                logger,
                 f"Creating and caching dataset for once on all processes."
             )
             if self.total_num_iterations is None:
@@ -177,6 +176,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 num_repeats += 1
                 if num_repeats > 1:
                     self._log_on_main(
+                        logger,
                         f"Repeating the dataset {num_repeats} times to cover all iterations."
                     )
                     if self.distributed_state.is_main_process:
@@ -229,6 +229,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
 
         if iteration is None:
             self._log_on_main(
+                logger,
                 "Iteration is None. Using 0 as the iteration.", level="warning"
             )
             iteration = 0
@@ -246,6 +247,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         else:
             num_samples = int(self.initial_ds_after_filter_size * self.dataset_portion)
             self._log_on_main(
+                logger,
                 f"Using {num_samples} samples for each iteration based on the dataset portion.")
         assert num_samples <= len(dataset)
 
@@ -271,9 +273,11 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             dataset = dataset.select(range(num_samples))
 
         self._log_on_main(
+            logger,
             f"Dataset Size(portion={self.dataset_portion}): {len(dataset)}"
         )
         self._log_on_main(
+            logger,
             f"Dataset Examples: "
             f"{json.dumps([dataset[i] for i in range(min(2, len(dataset)))], indent=2, sort_keys=True)}"
         )
@@ -600,6 +604,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             filter_out_long_questions, num_proc=4, desc="Filtering long questions"
         )
         self._log_on_main(
+            logger,
             f"Filtered out {length_before - len(dataset)} long questions from {length_before} questions."
         )
         return dataset

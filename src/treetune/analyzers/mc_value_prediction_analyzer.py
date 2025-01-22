@@ -5,14 +5,15 @@ import pickle
 import random
 import tempfile
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import Any, Dict, List, Tuple
 
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 
-from treetune import logging_utils
 from treetune.analyzers.analyzer import Analyzer
-from treetune.analyzers.valnet_prediction_analyzer import ValNetPredictionAnalyzer
+from treetune.analyzers.valnet_prediction_analyzer import \
+    ValNetPredictionAnalyzer
+from treetune.common import logging_utils
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.wandb_utils import save_inference_result_to_cloud
 from treetune.trainers.policy_trainer import PolicyTrainer

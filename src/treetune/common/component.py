@@ -1,21 +1,20 @@
-from logging import Logger
 from pathlib import Path
 from typing import Optional
 
 from accelerate import PartialState
 from wandb.sdk.wandb_run import Run
 
-from ..logging_utils import get_logger
+from .logging_utils import get_logger
+from .registrable import Registrable
 
 logger = get_logger(__name__)
 
-class Component:
+class Component(Registrable):
     def __init__(
         self,
-        seed: int,
-        distributed_state: PartialState, 
+        seed: Optional[int] = None,
+        distributed_state: Optional[PartialState] = None, 
         cloud_logger: Optional[Run] = None,
-        logger: Logger = None,
         root_dir: Optional[Path] = None,
     ):
         super().__setattr__('_components', {})  # Initialize the component registry
@@ -23,13 +22,14 @@ class Component:
         self.seed = seed
         self.distributed_state = distributed_state
         self.cloud_logger = cloud_logger
-        self.logger = logger
         self.root_dir = root_dir
         self.root_dir.mkdir(parents=True, exist_ok=True)
         
         self._iteration = 0
         self._metrics = {}
         self._root_dir = self.root_dir / f"iteration__{self._iteration:04d}"
+        
+        self._log_on_main(logger, self)
 
     def is_main_process(self) -> bool:
         return self.distributed_state.is_main_process
@@ -46,6 +46,9 @@ class Component:
         if isinstance(value, Component):  # Automatically register subcomponents
             self._components[name] = value
         super().__setattr__(name, value)  # Set attribute normally
+    
+    def __repr__(self):
+        return f"{self.__class__.__name__}({', '.join(f'{k}={v}' for k, v in self.__dict__.items())})"
 
     def named_components(self, memo=None, prefix=""):
         if memo is None:

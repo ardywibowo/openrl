@@ -1,6 +1,6 @@
 from datasets import DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 
 logger = logging_utils.get_logger(__name__)

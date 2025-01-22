@@ -2,7 +2,7 @@ import copy
 import json
 import random
 from random import shuffle
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from accelerate import PartialState
@@ -10,14 +10,15 @@ from datasets import Dataset
 from tqdm import tqdm
 from wandb.apis.public import Run
 
-from treetune import logging_utils
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators.base_episode_generator import EpisodeGeneratorStrategy
-from treetune.episodes import Episode
+from treetune.episode_generators.base_episode_generator import \
+    EpisodeGeneratorStrategy
 from treetune.episode_generators.path_aggregators import PathAggregator
-from treetune.episode_generators.path_filters import PathFilter, SuccessfulPathFilter
+from treetune.episode_generators.path_filters import (PathFilter,
+                                                      SuccessfulPathFilter)
 from treetune.episode_generators.path_post_processors import PathPostProcessor
+from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
 from treetune.tokenization_utils import Tokenizer
@@ -217,8 +218,8 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         logger.info("**** Precomputing training episodes from inference results ****")
         logger.info(f"\tNumber of inference results: {len(results_lst)}")
 
-        from multiprocessing import Pool
         from functools import partial
+        from multiprocessing import Pool
 
         with Pool(8) as p:
             results_lst = list(

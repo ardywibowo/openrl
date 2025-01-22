@@ -1,12 +1,11 @@
 import json
 import os
-from typing import Dict, Any, List
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Any, Dict, List
 
 import _jsonnet
 import fire
-
 from common.py_utils import include_paths
 
 # Set PYTHONPATH to src/ directory.
@@ -23,12 +22,11 @@ class EntryPoint(object):
 
     def __init__(self, configs: str, debug_mode: bool = None):
         # Lazy import to avoid long startup time.
-        from treetune import logging_utils
+        from treetune.common import logging_utils
 
         logger = logging_utils.get_logger()
 
-        from treetune.common import py_utils
-        from treetune.common import Params
+        from treetune.common import Params, py_utils
 
         # configs format: "path/to/config1.jsonnet,path/to/config2.jsonnet"
         config_paths = [f.strip() for f in configs.split(",")]

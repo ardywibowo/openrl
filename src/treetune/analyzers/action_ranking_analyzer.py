@@ -7,15 +7,14 @@ import pickle
 import random
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import Any, Dict, List, Optional, Union
 
 from accelerate.utils import release_memory
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 
-from treetune import logging_utils
 from treetune.analyzers import ValNetPredictionAnalyzer
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.inference_strategies import InferenceStrategy

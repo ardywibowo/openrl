@@ -9,7 +9,7 @@ import subprocess
 import time
 import weakref
 from pathlib import Path
-from typing import Optional, List, Any, Union
+from typing import Any, List, Optional, Union
 
 import torch
 from accelerate import DistributedType
@@ -18,14 +18,14 @@ from datasets import Dataset
 from transformers import AutoConfig
 
 from treetune.analyzers import Analyzer
-from treetune.common import Lazy, JsonDict, Params
+from treetune.common import JsonDict, Lazy, Params
+from treetune.common.logging_utils import get_logger
 from treetune.common.notebook_utils import get_repo_dir
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
-from treetune.inference_pipelines.base_inference_pipeline import InferencePipeline
-from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
+from treetune.pipelines.base_inference_pipeline import InferencePipeline
 from treetune.runtime.base_runtime import DistributedRuntime, Runtime
 from treetune.tokenization_utils.base_tokenizer import Tokenizer
 from treetune.trainers.base_trainer import Trainer
@@ -107,8 +107,8 @@ class PolicyIterationRuntime(DistributedRuntime):
     def _init_episode_generator(self):
         self.episode_generator = self.episode_generator.construct(
             tokenizer=self.tokenizer,
-            distributed_state=self.distributed_state,
             num_episodes_per_iteration=self.num_episodes_per_iteration,
+            distributed_state=self.distributed_state,
             debug=self.debug_mode,
             cloud_logger=self.cloud_logger,
             root_dir=self.exp_root,

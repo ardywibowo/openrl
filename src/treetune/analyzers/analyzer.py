@@ -6,8 +6,7 @@ from typing import Optional
 from accelerate import PartialState
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
-from treetune.common import Registrable
+from treetune.common import Registrable, logging_utils
 
 logger = logging_utils.get_logger(__name__)
 

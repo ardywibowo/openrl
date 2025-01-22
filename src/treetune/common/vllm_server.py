@@ -4,17 +4,16 @@ import re
 import shlex
 import socket
 import subprocess
-import signal
 import time
 from pathlib import Path
-from typing import Optional, Union, Callable, Dict
+from typing import Callable, Dict, Optional, Union
 
 import psutil
 import requests
 
 from . import FromParams
+from .logging_utils import get_logger
 from .notebook_utils import get_repo_dir
-from ..logging_utils import get_logger
 
 logger = get_logger(__name__)
 

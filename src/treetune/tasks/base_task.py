@@ -1,15 +1,9 @@
-from typing import Any, Optional, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
-from datasets import (
-    Dataset,
-    DatasetDict,
-    IterableDataset,
-    IterableDatasetDict,
-    load_dataset,
-)
+from datasets import (Dataset, DatasetDict, IterableDataset,
+                      IterableDatasetDict, load_dataset)
 
-from treetune import logging_utils
-from treetune.common import Registrable
+from treetune.common import Registrable, logging_utils
 
 logger = logging_utils.get_logger(__name__)
 

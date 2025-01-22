@@ -3,19 +3,18 @@ import os
 import random
 import re
 import uuid
-from typing import List, Optional, Callable
+from typing import Callable, List, Optional
 
 import evaluate
 import numpy as np
 
-from treetune import logging_utils
-from treetune.common import Registrable, JsonDict
+from treetune.common import JsonDict, Registrable
 from treetune.common import guidance_utils as gu
+from treetune.common import logging_utils
 from treetune.common.py_utils import format_string
 from treetune.inference_strategies.tree_inference import Node
-from treetune.inference_strategies.tree_inference.branch_factor_strategy import (
-    BranchFactorStrategy,
-)
+from treetune.inference_strategies.tree_inference.branch_factor_strategy import \
+    BranchFactorStrategy
 from treetune.tokenization_utils import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
@@ -414,9 +413,8 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
         self.num_new_rollouts = num_new_rollouts
         self.rollout_eval_callback: Optional[Callable[..., float]] = None
 
-        from treetune.inference_strategies.tree_inference.answer_extraction import (
-            AnswerExtractor,
-        )
+        from treetune.inference_strategies.tree_inference.answer_extraction import \
+            AnswerExtractor
 
         self.answer_extractor: Optional[AnswerExtractor] = None
 

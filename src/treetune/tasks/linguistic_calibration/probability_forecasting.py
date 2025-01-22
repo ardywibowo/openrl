@@ -2,9 +2,9 @@ from collections import defaultdict
 from typing import Any, Dict
 
 import pandas as pd
-from datasets import DatasetDict, Dataset, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 
 logger = logging_utils.get_logger(__name__)

@@ -1,15 +1,14 @@
 # REST(EM) Beyond Human Data: Scaling Self-Training for Problem-Solving with Language Models https://arxiv.org/abs/2312.06585
 import json
-from typing import Any, Dict, Union, List
+from typing import Any, Dict, List, Union
 
 import numpy as np
 from datasets import Dataset
+from tqdm import tqdm
 
+from treetune.common.logging_utils import get_logger
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
 from treetune.episodes import Episode
-from treetune.logging_utils import get_logger
-
-from tqdm import tqdm
 
 logger = get_logger(__name__)
 
