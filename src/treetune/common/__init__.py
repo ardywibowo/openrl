@@ -5,12 +5,16 @@ from .from_params import FromParams, ConfigurationError
 from .lazy import Lazy
 from .params import Params
 from .registrable import Registrable
+from .component import Component
+from .vllm_server_handler import VLLMServerHandler
 
 assert FromParams
 assert Lazy
 assert Params
 assert Registrable
 assert ConfigurationError
+assert Component
+assert VLLMServerHandler
 
 JsonDict = Dict[str, Any]
 
