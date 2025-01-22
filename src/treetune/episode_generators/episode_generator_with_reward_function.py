@@ -30,7 +30,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             seed=self.seed,
             distributed_state=self.distributed_state,
             cloud_logger=self.cloud_logger,
-            exp_root=self.exp_root,
+            root_dir= self.root_dir / "reward_function",
             tokenizer=self.tokenizer
         )
         self.append_bos_to_query = append_bos_to_query

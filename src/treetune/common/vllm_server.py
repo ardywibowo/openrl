@@ -140,6 +140,7 @@ class VLLMServer(FromParams):
         seed: int = 42,
         swap_space: int = 16,
         gpu_memory_utilization: float = 0.9,
+        min_available_gpu_memory_mb: Optional[int] = None,
         max_num_seqs: int = 256,
         enable_prefix_caching: bool = False,
         disable_sliding_window: bool = False,
@@ -161,6 +162,7 @@ class VLLMServer(FromParams):
         self.seed = seed
         self.swap_space = swap_space
         self.gpu_memory_utilization = gpu_memory_utilization
+        self.min_available_gpu_memory_mb = min_available_gpu_memory_mb
         self.max_num_seqs = max_num_seqs
         self.enable_prefix_caching = enable_prefix_caching
         self.disable_sliding_window = disable_sliding_window

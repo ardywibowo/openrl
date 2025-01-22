@@ -14,12 +14,12 @@ class RewardFunction(Registrable):
         seed: int,
         distributed_state: PartialState, 
         cloud_logger: Optional[Run] = None,
-        exp_root: Optional[Path] = None,
+        root_dir: Optional[Path] = None,
     ) -> None:
         self.seed = seed
         self.distributed_state = distributed_state
         self.cloud_logger = cloud_logger
-        self.exp_root = exp_root
+        self.root_dir = root_dir
     
     def get_unfinished_response_penalty(self) -> float:
         raise NotImplementedError

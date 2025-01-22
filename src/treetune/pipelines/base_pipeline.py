@@ -3,36 +3,41 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
+from accelerate import PartialState
 from datasets import Dataset
 from wandb.sdk.wandb_run import Run
 
 from treetune.analyzers import Analyzer
-from treetune.common import Registrable, Lazy, JsonDict, Params
+from treetune.common import JsonDict, Lazy, Params, Registrable, Component, ComponentWithVLLMServer
 from treetune.common.py_utils import need_to_minimize_stored_files
-from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
-from treetune.tasks.base_task import Task
-
+from treetune.inference_strategies.base_inference_strategy import \
+    InferenceStrategy
 from treetune.logging_utils import get_logger
-
+from treetune.tasks.base_task import Task
 
 logger = get_logger(__name__)
 
+from dataclasses import dataclass
+from typing import List, Optional
 
-class InferencePipeline(Registrable):
-    pass
+class Pipeline(Registrable, ComponentWithVLLMServer):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+    
+    def __call__(self, input_dataset: Optional[Dataset] = None, iteration: Optional[int] = None) -> Dataset:
+        raise NotImplementedError
 
-
-@InferencePipeline.register("vllm")
-class VLLMInferencePipeline(InferencePipeline):
+@Pipeline.register("vllm")
+class VLLMInferencePipeline(Pipeline):
     def __init__(
         self,
         inference_strategy: Lazy[InferenceStrategy],
         task: Task,
         dataset_split: str,
         inference_name: Optional[str] = None,
-        exp_root: Optional[Path] = None,
+        root_dir: Optional[Path] = None,
         dataset_portion: float = 1.0,
         dataset_shuffle_before_portion: bool = False,
         dataset_num_shards: int = 1,
@@ -51,7 +56,7 @@ class VLLMInferencePipeline(InferencePipeline):
     ):
         """
         Params:
-            exp_root (Path):
+            root_dir (Path):
                 The root directory of the experiment.
             inference_strategy (InferenceStrategy):
                 The inference strategy to use
@@ -85,7 +90,7 @@ class VLLMInferencePipeline(InferencePipeline):
                 The prefix to use for metrics.
         """
         self.task = task
-        self.exp_root = exp_root
+        self.root_dir = root_dir
         self.dataset_split = dataset_split
         self.dataset_portion = dataset_portion
         self.dataset_shuffle_before_portion = dataset_shuffle_before_portion
@@ -101,10 +106,10 @@ class VLLMInferencePipeline(InferencePipeline):
         if self.inference_name is not None:
             self.metrics_prefix = f"{self.inference_name}/{self.metrics_prefix}"
 
-        if self.exp_root is None:
+        if self.root_dir is None:
             # Create a tmp directory
-            self.exp_root = Path("/tmp") / next(tempfile._get_candidate_names())
-            self.exp_root.mkdir(parents=True, exist_ok=True)
+            self.root_dir = Path("/tmp") / next(tempfile._get_candidate_names())
+            self.root_dir.mkdir(parents=True, exist_ok=True)
 
         if self.debug_mode:
             logger.info("Debug mode is on. Using 10 examples from the dataset.")
@@ -154,7 +159,7 @@ class VLLMInferencePipeline(InferencePipeline):
         if hasattr(self, "_cached_results_dir"):
             return self._cached_results_dir
 
-        result_dir = self.exp_root / "inference_results" / self.inference_job_id
+        result_dir = self.root_dir / "inference_results" / self.inference_job_id
         result_dir.mkdir(parents=True, exist_ok=True)
         return result_dir
 
@@ -234,4 +239,4 @@ class VLLMInferencePipeline(InferencePipeline):
         self.cloud_logger.save(str(inference_results_zip.absolute()), policy="now")
 
 
-InferencePipeline.default_implementation = "vllm"
+Pipeline.default_implementation = "vllm"

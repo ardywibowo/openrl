@@ -39,21 +39,18 @@ class MCAdvantageDistributionAnalyzer(Analyzer):
     def _get_list_of_evaluation_iterations(
         self, ignore_worker_vars: bool = False
     ) -> List[Path]:
-        episodes_dir = self.runtime.exp_root / "temp_episodes"
-        episodes_dir.mkdir(exist_ok=True, parents=True)
-
         def can_analyze(iter_path: Path) -> bool:
             return all(
-                (p / "trajectories.pkl").exists()
+                (p / "episode_generator" / "temp_episodes" / "trajectories.pkl").exists()
                 for p in iter_path.glob("infer_results/process_*")
             )
 
         available_iterations = [
             iter_dir
-            for iter_dir in episodes_dir.glob("iteration__*")
+            for iter_dir in self.runtime.exp_root.glob("*")
             if can_analyze(iter_dir)
         ]
-        available_iterations.sort(key=lambda x: int(x.name.replace("iteration__", "")))
+        available_iterations.sort(key=lambda x: int(x))
 
         # Limit the number of checkpoints to analyze
         # noinspection DuplicatedCode

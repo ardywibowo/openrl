@@ -32,7 +32,7 @@ from treetune.common.deepspeed_utils import (
 )
 from treetune.common.vllm_server import VLLMServer
 from treetune.common.wandb_utils import get_repo_dir
-from treetune.inference_pipelines import InferencePipeline
+from treetune.pipelines import Pipeline
 from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
 from treetune.trainers.arguments import TrainingArguments
@@ -393,7 +393,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                     logger.info(f"(EARLY-STOP)Running inference pipeline {inference_name}")
                     es_root_dir = eval_dir / ckpt.name / inference_name
                     es_root_dir.mkdir(parents=True, exist_ok=True)
-                    pipeline = InferencePipeline.from_params(
+                    pipeline = Pipeline.from_params(
                         Params(cfg),
                         tokenizer=self.early_stop_tokenizer,   # todo: find the tokenizer
                         seed=2746318213,
@@ -1686,4 +1686,3 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                                 file.unlink()
                         all_removed_files_and_dirs += removed_files_and_dirs
         dist.barrier()
-

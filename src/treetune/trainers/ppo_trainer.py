@@ -2361,7 +2361,7 @@ class PPOTrainer(DeepSpeedPolicyTrainer):
                 shutil.rmtree(episode, ignore_errors=True)
 
             # Remove unnecessary temp_episodes
-            for episode in self.experiment_root.glob("temp_episodes/iteration__*"):
+            for episode in self.experiment_root.glob("episode_generator/dataset_pipeline/iteration__*"):
                 if not episode.is_dir():
                     continue
 
