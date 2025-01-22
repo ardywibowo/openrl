@@ -111,7 +111,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             num_episodes_per_iteration=self.num_episodes_per_iteration,
             debug=self.debug_mode,
             cloud_logger=self.cloud_logger,
-            exp_root=self.exp_root,
+            root_dir=self.exp_root,
             seed=self.global_vars["seed"],
         )
         # Handle the case where we are precomputing episodes from an offline inference result

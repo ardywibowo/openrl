@@ -11,6 +11,7 @@ from wandb.sdk.wandb_run import Run
 
 from treetune.common import Lazy
 from treetune.common import Registrable
+from treetune.common import Component
 from treetune.inference_strategies import InferenceStrategy
 from treetune.logging_utils import get_logger
 from treetune.tokenization_utils.base_tokenizer import Tokenizer
@@ -23,26 +24,19 @@ class EpisodeGeneratorStrategy(Registrable):
         raise NotImplementedError
 
 
-class EpisodeGenerator(Registrable):
+class EpisodeGenerator(Registrable, Component):
     can_precompute_episodes: bool = False
     support_distributed: bool = False
 
     def __init__(
         self,
         tokenizer: Tokenizer,
-        distributed_state: PartialState,
         num_episodes_per_iteration: int,
-        exp_root: Optional[Path] = None,
-        cloud_logger: Optional[Run] = None
+        **kwargs
     ):
-        self.distributed_state = distributed_state
-        self.cloud_logger = cloud_logger
+        super().__init__(**kwargs)
         self.num_episodes_per_iteration = num_episodes_per_iteration
         self.tokenizer = tokenizer
-        self.exp_root = exp_root
-
-    def is_main_process(self) -> bool:
-        return self.distributed_state.is_main_process
 
     def generate(
         self, iteration: Optional[int] = None
@@ -223,6 +217,8 @@ class EmptyEpisodeGenerator(EpisodeGenerator):
                 Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=self.tokenizer.decode(query_token_ids),
+                    response_text=self.tokenizer.decode(response_token_ids),
                     reward=reward,
                     advantages=advantages,
                 )
@@ -258,6 +254,8 @@ class DebugFileEpisodeGenerator(EpisodeGenerator):
                 Episode(
                     query_token_ids=query_token_ids,
                     response_token_ids=response_token_ids,
+                    query_text=self.tokenizer.decode(query_token_ids),
+                    response_text=self.tokenizer.decode(response_token_ids),
                     reward=reward,
                 )
             )

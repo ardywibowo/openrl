@@ -99,7 +99,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             self.dataset_portion = 1.0
 
         if temp_dir_root is None:
-            self.temp_dir_root = self.exp_root / "temp_episodes"
+            self.temp_dir_root = self.root_dir / "temp_episodes"
             self._log_on_main(f"Using default temp_dir_root: {self.temp_dir_root}")
         else:
             self.temp_dir_root = Path(temp_dir_root)
