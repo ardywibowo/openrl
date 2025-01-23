@@ -68,11 +68,17 @@ class VLLMServerHandler(Component):
             return
         
         self._vllm_server.stop_server()
-        del self._vllm_server
-        del self._vllm_server_configs
+        # del self._vllm_server
+        # del self._vllm_server_configs
+        
+        self._vllm_server = None
+        self._vllm_server_configs = None
+        
         self._vllm_cleanup_fn()
         release_memory()
         logger.info(f"Rank {self.distributed_state.process_index} stopped vLLM server.")
+        
+        self.distributed_state.wait_for_everyone()
     
     def get_vllm_init_and_cleanup_fn(
         self,

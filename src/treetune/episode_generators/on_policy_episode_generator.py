@@ -358,7 +358,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                     logs = {f"episodes_metric/fill_missing_episodes": num_repeats}
                     
                     self._metrics.update(logs)
-                    self._metrics["train/global_iteration"] = iteration
                 else:
                     raise ValueError(
                         f"Number of episodes generated ({len(merged)}) is less than "
@@ -379,7 +378,10 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
 
         self.distributed_state.wait_for_everyone()
         
-        self._cloud_log(self.gather_metrics())
+        metrics = self.gather_metrics()
+        if len(metrics) > 0:
+            metrics["train/global_iteration"] = iteration
+            self._cloud_log(metrics)
         return episodes
 
     def _run_inference(
