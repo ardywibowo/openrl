@@ -48,7 +48,9 @@ class ModelBasedRewardFunction(RewardFunction):
         cache_reward_model_on_cpu: bool = False,
         temp_cache_dir: Optional[str] = None,
         unfinished_response_penalty: Optional[float] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         # `reward_model` and `reward_pipeline_model_name` are mutually exclusive
         if reward_model is not None and reward_pipeline_model_name is not None:
             raise ValueError(

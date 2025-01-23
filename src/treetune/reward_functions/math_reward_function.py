@@ -19,7 +19,9 @@ class MATHRewardFunction(RewardFunction):
         penalize_unfinished_response: bool = False,
         unfinished_response_penalty: float = -1.0,
         timeout: Optional[int] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         assert isinstance(math_task, (MATH, GSM8K))
         self.tokenizer = tokenizer
         self.math_task = math_task

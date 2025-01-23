@@ -5,10 +5,12 @@ local num_mc_rollouts = 9;
 + {
     episode_generator+: {
         type: 'math_episode_generator_w_mc_advantages',
-
-        vllm_server+: {
-            swap_space: 8,
-            enable_prefix_caching: true,
+        
+        vllm_server_handler +: {
+            vllm_server+: {
+                swap_space: 8,
+                enable_prefix_caching: true,
+            },
         },
 
         value_estimation_inference_strategy+: {

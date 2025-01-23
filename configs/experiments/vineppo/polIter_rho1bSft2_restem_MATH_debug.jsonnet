@@ -82,9 +82,11 @@ local math_validation_inference_pipeline =
         dataset_sample_with_replacement: false,
         dataset_portion: 0.01,
         total_num_iterations: total_num_iterations,
-
-        vllm_server+: { swap_space: 8, max_num_seqs: 512 },
-        vllm_min_available_gpu_memory_mb: 10 * 1024,
+        
+        vllm_server_handler+: {
+            vllm_server+: { swap_space: 8, max_num_seqs: 512 },
+            min_available_gpu_memory_mb: 10 * 1024,
+        },
 
         inference_strategy: {
             type: 'cot',

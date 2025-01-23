@@ -68,8 +68,10 @@ local math_validation_inference_pipeline =
 + (import 'trainers/restem_MATH.jsonnet')
 + {
     episode_generator+: {
-        vllm_server+: {
-            swap_space: 8,
+        vllm_server_handler+: {
+            vllm_server+: {
+                swap_space: 8,
+            },
         },
         // Override the task
         type: "math_restem_episode_generator",

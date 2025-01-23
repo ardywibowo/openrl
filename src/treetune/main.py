@@ -112,5 +112,4 @@ class EntryPoint(object):
 
 
 if __name__ == "__main__":
-    print("EHEASD", source_dir)
     fire.Fire(EntryPoint)

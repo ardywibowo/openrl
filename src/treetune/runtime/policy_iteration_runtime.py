@@ -109,7 +109,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             tokenizer=self.tokenizer,
             num_episodes_per_iteration=self.num_episodes_per_iteration,
             distributed_state=self.distributed_state,
-            debug=self.debug_mode,
+            debug_mode=self.debug_mode,
             cloud_logger=self.cloud_logger,
             root_dir=self.exp_root,
             seed=self.global_vars["seed"],

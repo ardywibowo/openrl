@@ -9,9 +9,6 @@ local question_template = prompt_library.prompt_library.tree.question_template;
 {
     episode_generator+: {
         type: 'math_episode_generator',
-        vllm_server+: {
-            swap_space: 16,
-        },
 
         append_bos_to_query: true,
         append_eos_to_response: true,
@@ -19,10 +16,15 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         dataset_shuffle_on_each_iteration: true,
         dataset_shuffle_before_portion: true,
         dataset_sample_with_replacement: false,
-
-        vllm_gpu_memory_utilization: 'auto',
-        vllm_min_available_gpu_memory_mb: 20 * 1024,
-        wait_until_memory_release: true,
+        
+        vllm_server_handler+: {
+            vllm_server+: {
+                swap_space: 16,
+            },
+            gpu_memory_utilization: 'auto',
+            min_available_gpu_memory_mb: 20 * 1024,
+            wait_until_memory_release: true,
+        },
 
         reward_function: {
             type: 'math_reward_function',

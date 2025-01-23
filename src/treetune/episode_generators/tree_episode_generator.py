@@ -160,12 +160,9 @@ class TreeEpisodeUtils:
 class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
     def __init__(
         self,
-        tokenizer: Tokenizer,
-        distributed_state: PartialState,
         inference_strategy: Lazy[InferenceStrategy],
         task: Task,
         episode_strategy: EpisodeGeneratorStrategy,
-        num_episodes_per_iteration: int,
         # During tree generation, we early stop expanding a node if the model reaches the final answer.
         # Thus, in order to make sure such early stopped nodes have equal weight as a node that its children
         # are all expanded, we repeat them branch_factor ^ (max_depth - curr_depth) times.
@@ -173,8 +170,7 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         branch_factor: Optional[int] = None,
         max_depth: Optional[int] = None,
         include_importance_weights: bool = False,
-        cloud_logger: Optional[Run] = None,
-        debug: bool = False,
+        **kwargs
     ):
         self.inference_strategy = inference_strategy.construct(result_dir=None)
         self.task = task
@@ -192,17 +188,11 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
 
         self.episode_cache = []
 
-        super().__init__(
-            tokenizer,
-            distributed_state,
-            num_episodes_per_iteration=num_episodes_per_iteration,
-            cloud_logger=cloud_logger,
-        )
+        super().__init__(**kwargs)
 
-        self.debug = debug
-        if debug:
+        if self.debug_mode:
             self.num_episodes_per_iteration = 10
-        self.can_precompute_episodes = not debug
+        self.can_precompute_episodes = not self.debug_mode
 
     def precompute_episodes(self):
         assert (
@@ -212,7 +202,7 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         results: Dataset = self.inference_strategy.generate(None)
         results_lst = results.to_list()
 
-        if self.debug:
+        if self.debug_mode:
             results_lst = random.sample(results_lst, 100)
 
         logger.info("**** Precomputing training episodes from inference results ****")
@@ -254,7 +244,7 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         # generate until we have enough episodes
         while len(episodes) < self.num_episodes_per_iteration:
             results = self.inference_strategy.generate(None)
-            if self.debug:
+            if self.debug_mode:
                 results = results.shuffle(seed=42).select(range(100))
                 logger.warning("Debug mode: only using 10 inference results")
 

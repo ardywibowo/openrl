@@ -13,7 +13,7 @@ import torch.cuda
 from accelerate.utils import release_memory
 from datasets import Dataset, concatenate_datasets
 
-from treetune.common import Lazy
+from treetune.common import Lazy, VLLMServerHandler
 from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
 from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import find_n_free_ports
@@ -34,13 +34,10 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
     def __init__(
         self,
         inference_strategy: Lazy[InferenceStrategy],
-        vllm_server: Lazy[VLLMServer],
+        vllm_server_handler: Lazy[VLLMServerHandler],
         task: Task,
         seed: int,
         initial_model_name_or_path: str,
-        vllm_gpu_memory_utilization: Union[float, str] = 0.9,
-        vllm_min_available_gpu_memory_mb: Optional[int] = None,
-        wait_until_memory_release: bool = False,
         dataset_shuffle_on_each_iteration: bool = True,
         dataset_shuffle_before_portion: bool = True,
         dataset_split: str = "train",
@@ -54,7 +51,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         max_question_length: Optional[int] = None,
         question_template: Optional[str] = None,
         save_generations_every_n_iteration: Optional[int] = None,
-        debug: bool = False,
         **kwargs,
     ):
         """
@@ -65,21 +61,17 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self._logger = logger
 
         self.inference_strategy_lazy = inference_strategy
-        self.vllm_server_lazy = vllm_server
+        self.vllm_server_handler = vllm_server_handler.construct(**kwargs)
         self.task = task
         self.dataset_split = dataset_split
         self.seed = seed
         self.initial_model_name_or_path = initial_model_name_or_path
-        self.debug = debug
         self.dataset_portion = dataset_portion
         self.dataset_num_samples_per_iteration = dataset_num_samples_per_iteration
         self.dataset_shuffle_before_portion = dataset_shuffle_before_portion
         self.dataset_shuffle_on_each_iteration = dataset_shuffle_on_each_iteration
         self.dataset_sample_with_replacement = dataset_sample_with_replacement
         self.dataset_initial_size = dataset_initial_size
-        self.vllm_gpu_memory_utilization = vllm_gpu_memory_utilization
-        self.vllm_min_available_gpu_memory_mb = vllm_min_available_gpu_memory_mb
-        self.wait_until_memory_release = wait_until_memory_release
         self.total_num_iterations = total_num_iterations
         self.fill_missing_episodes = fill_missing_episodes
         self.max_question_length = max_question_length
@@ -202,26 +194,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         """
         Generate episodes by sampling from the model.
         """
-        this_process_device = self.distributed_state.device
         release_memory()
-
-        if self.vllm_min_available_gpu_memory_mb is not None:
-            total_mem_mb = (
-                torch.cuda.get_device_properties(this_process_device.index).total_memory
-                / 1024**2
-            )
-            used_threshold_mb = total_mem_mb - self.vllm_min_available_gpu_memory_mb
-            logger.info(
-                f"Need at least {self.vllm_min_available_gpu_memory_mb}. "
-                f"Waiting for GPU{this_process_device.index} used memory to be below {used_threshold_mb} MB. "
-                f"Total GPU memory: {total_mem_mb} MB."
-            )
-            wait_for_memory_release(
-                this_process_device.index,
-                threshold_mb=used_threshold_mb,
-            )
-
-        gpu_memory_usage_before_mb = get_gpu_memory()[this_process_device.index]
 
         from deepspeed.runtime.utils import see_memory_usage
 
@@ -233,6 +206,8 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 "Iteration is None. Using 0 as the iteration.", level="warning"
             )
             iteration = 0
+        
+        self.init(iteration)
 
         process_index = self.distributed_state.process_index
 
@@ -304,44 +279,20 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         results_dir = temp_dir / "infer_results" / f"process_{process_index:02d}"
         results_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create a seed based on self.seed, self.dist_state.process_index, and iteration
-        seed = self.seed + process_index * 100 + iteration
-
         if latest_policy_path is None:
             hf_ckpt_path_or_model = self.initial_model_name_or_path
         else:
             hf_ckpt_path_or_model = str(latest_policy_path)
-
-        vllm_init_fn = self._get_vllm_init_fn(
-            results_dir=results_dir,
-            hf_ckpt_path_or_model=hf_ckpt_path_or_model,
-            process_index=process_index,
-            seed=seed,
-        )
-
-        metrics = {}
+        
         t0 = time.time()
-
-        def vllm_cleanup_fn():
-            if self.wait_until_memory_release:
-                threshold_mb = (
-                    gpu_memory_usage_before_mb * 1.1
-                )  # Allow for 10% tolerance
-                wait_for_memory_release(
-                    this_process_device.index,
-                    threshold_mb=threshold_mb,
-                )
-
+        
         infer_results = self._run_inference(
             dataset_shard=dataset,
-            vllm_init_fn=vllm_init_fn,
-            vllm_cleanup_fn=vllm_cleanup_fn,
-            results_root_dir=results_dir,
-            seed=seed,
-            iteration=iteration,
+            model_name_or_path=hf_ckpt_path_or_model,
+            results_root_dir=results_dir
         )
 
-        metrics["timing/episode_generation/inference"] = time.time() - t0
+        self._metrics["timing/episode_generation/inference"] = time.time() - t0
 
         logger.info(f"Process {process_index} finished inference.")
 
@@ -358,7 +309,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         )
         del episodes_ds_shard
         release_memory()
-        metrics["timing/episode_generation/inferResult_to_episodes"] = time.time() - t0
+        self._metrics["timing/episode_generation/inferResult_to_episodes"] = time.time() - t0
 
         # Log the vLLM stats
         if self.distributed_state.is_main_process:
@@ -376,9 +327,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
 
             vllm_stats = {f"vllm_stats/{k}": round(v, 2) for k, v in vllm_stats.items()}
             logger.info(f"vLLM Stats: {vllm_stats}")
-            metrics.update(vllm_stats)
-
-        self._cloud_log(metrics)
+            self._metrics.update(vllm_stats)
 
         # Concatenate all episodes shards
         self.distributed_state.wait_for_everyone()
@@ -407,7 +356,9 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                     merged = merged.shuffle(seed=self.seed + iteration)
                     merged = merged.select(range(self.num_episodes_per_iteration))
                     logs = {f"episodes_metric/fill_missing_episodes": num_repeats}
-                    self._cloud_log({**logs, "train/global_iteration": iteration})
+                    
+                    self._metrics.update(logs)
+                    self._metrics["train/global_iteration"] = iteration
                 else:
                     raise ValueError(
                         f"Number of episodes generated ({len(merged)}) is less than "
@@ -427,17 +378,15 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self._clean_up_temp_dir(temp_dir)
 
         self.distributed_state.wait_for_everyone()
-
+        
+        self._cloud_log(self.gather_metrics())
         return episodes
 
     def _run_inference(
         self,
         dataset_shard: Dataset,
-        vllm_init_fn: Callable[[], Tuple[VLLMServer, Dict[str, Any]]],
-        vllm_cleanup_fn: Callable[[], None],
+        model_name_or_path: str,
         results_root_dir: Path,
-        seed: int,
-        iteration: int,
     ):
         """
         Potentially start a vLLM server and run inference to generate results needed for episode generation.
@@ -453,14 +402,15 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 The seed for this process to use for inference.
         """
         infer_result_path = results_root_dir / "results_ds"
-        vllm_server, guidance_llm_kwargs = vllm_init_fn()
+        guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+            model_name_or_path, results_root_dir)
 
         # Initialize the inference strategy with the vLLM server URL
         inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
         inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
         inference_strategy = inference_strategy_lazy.construct(
             result_dir=results_root_dir,
-            seed=seed,
+            seed=self.get_process_seed(),
             cloud_logger=None,
             log_level=(
                 logging.WARNING
@@ -473,15 +423,9 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         results.save_to_disk(str(infer_result_path))
         
         logger.info(f"Rank {self.distributed_state.process_index} finished inference.")
-        vllm_server.stop_server()
         del results
-        del vllm_server
-        release_memory()
-        logger.info(f"Rank {self.distributed_state.process_index} stopped vLLM server.")
-
-        vllm_cleanup_fn()
-        release_memory()
-
+        
+        self.vllm_server_handler.kill_server()
         results = Dataset.load_from_disk(str(results_root_dir / "results_ds"))
         return results
 
@@ -489,69 +433,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self, inference_results: Dataset, iteration: int
     ) -> List[Union[Dict[str, Any], Episode]]:
         raise NotImplementedError
-
-    def _get_vllm_init_fn(
-        self,
-        results_dir: Path,
-        hf_ckpt_path_or_model: str,
-        process_index: int,
-        seed: int,
-    ) -> Callable[[], Tuple[VLLMServer, Dict[str, Any]]]:
-        vllm_server_lazy = self.vllm_server_lazy
-        vllm_gpu_memory_utilization = self.vllm_gpu_memory_utilization
-        self._set_vllm_ports(seed=seed)
-        vllm_port = self._vllm_port
-        if vllm_gpu_memory_utilization == "auto":
-            # Compute the GPU utilization based on amount of remaining memory
-            allocated_mem_mb = get_gpu_memory()[process_index]
-            total_mem_mb = (
-                torch.cuda.get_device_properties(process_index).total_memory / 1024**2
-            )
-
-            remaining_mem_mb = (
-                total_mem_mb - allocated_mem_mb
-            ) * 0.9  # Allow for 10% tolerance
-            vllm_gpu_memory_utilization = round(remaining_mem_mb / total_mem_mb, 2)
-
-            logger.info(
-                f"GPU #{process_index} Auto-computed vLLM GPU memory utilization: {vllm_gpu_memory_utilization}. "
-                f"Currently Allocated: {allocated_mem_mb} MB, "
-                f"Total: {total_mem_mb} MB, "
-                f"Remaining: {remaining_mem_mb} MB."
-            )
-
-        def _init() -> Tuple[VLLMServer, Dict[str, Any]]:
-            vllm_log_path = results_dir / "vllm_server.log"
-
-            logger.info(
-                f"Rank #{process_index} starting vLLM: "
-                f"model={hf_ckpt_path_or_model}   port={vllm_port}   seed={seed}"
-            )
-            t0 = time.time()
-            vllm_server = vllm_server_lazy.construct(
-                seed=seed,
-                port=vllm_port,
-                gpu_memory_utilization=vllm_gpu_memory_utilization,
-            )
-            server_url = vllm_server.start_server(
-                hf_ckpt_path_or_model=hf_ckpt_path_or_model,
-                gpu_idx=process_index,
-                wait_for_response=True,
-                log_path=vllm_log_path,
-                timeout=800,
-            )
-            self._cloud_log(
-                {
-                    "timing/episode_generation/vllm_start": time.time() - t0,
-                }
-            )
-
-            return vllm_server, {
-                "api_base": server_url,
-                "model": hf_ckpt_path_or_model,
-            }
-
-        return _init
 
     def _save_generations_to_cloud(self, generations_dir: Path, iteration: int):
         if self.cloud_logger is None or not self.is_main_process():
@@ -629,7 +510,3 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             return episode_obj
 
         return asdict(episode_obj)
-
-    def _cloud_log(self, *args, **kwargs):
-        if self.is_main_process() and self.cloud_logger is not None:
-            self.cloud_logger.log(*args, **kwargs)

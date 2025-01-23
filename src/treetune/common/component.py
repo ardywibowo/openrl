@@ -16,6 +16,7 @@ class Component(Registrable):
         distributed_state: Optional[PartialState] = None, 
         cloud_logger: Optional[Run] = None,
         root_dir: Optional[Path] = None,
+        debug_mode: Optional[bool] = False
     ):
         super().__setattr__('_components', {})  # Initialize the component registry
         
@@ -23,6 +24,8 @@ class Component(Registrable):
         self.distributed_state = distributed_state
         self.cloud_logger = cloud_logger
         self.root_dir = root_dir
+        self.debug_mode = debug_mode
+        
         self.root_dir.mkdir(parents=True, exist_ok=True)
         
         self._iteration = 0
@@ -30,6 +33,9 @@ class Component(Registrable):
         self._root_dir = self.root_dir / f"iteration__{self._iteration:04d}"
         
         self._log_on_main(logger, self)
+
+    def get_process_seed(self) -> int:
+        return self.seed + self._iteration * self.distributed_state.num_processes + self.distributed_state.process_index
 
     def is_main_process(self) -> bool:
         return self.distributed_state.is_main_process
@@ -79,8 +85,32 @@ class Component(Registrable):
                 module.apply(fn)
     
     def init(self, iteration: int):
+        """
+        Initialize the component and all its subcomponents with the given iteration.
+        """
         self._iteration = iteration
         self._metrics = {}
-        for component in self._components.values():
-            if component is not None:
+
+        # Update root directory for the current iteration
+        self._root_dir = self.root_dir / f"iteration__{self._iteration:04d}"
+
+        # Recursively initialize all subcomponents
+        for _, component in self.named_components():
+            if component is not self:
                 component.init(iteration)
+
+    def gather_metrics(self) -> dict:
+        """
+        Gather and combine _metrics from the current Component and all subcomponents.
+        """
+        combined_metrics = {}
+
+        # Gather metrics from the current component
+        combined_metrics.update(self._metrics)
+
+        # Gather metrics from all subcomponents
+        for _, component in self.named_components():
+            if component is not self:
+                combined_metrics.update(component._metrics)
+
+        return combined_metrics

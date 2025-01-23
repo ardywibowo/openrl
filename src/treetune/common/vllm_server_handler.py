@@ -19,16 +19,16 @@ class VLLMServerHandler(Component):
     def __init__(
         self,
         vllm_server: Lazy[VLLMServer],
-        vllm_gpu_memory_utilization: Union[float, str] = 0.9,
-        vllm_min_available_gpu_memory_mb: Optional[int] = None,
+        gpu_memory_utilization: Union[float, str] = 0.9,
+        min_available_gpu_memory_mb: Optional[int] = None,
         wait_until_memory_release: bool = False,
         **kwargs
     ):
         super().__init__(**kwargs)
         
         self.vllm_server_lazy = vllm_server
-        self.vllm_gpu_memory_utilization = vllm_gpu_memory_utilization
-        self.vllm_min_available_gpu_memory_mb = vllm_min_available_gpu_memory_mb
+        self.gpu_memory_utilization = gpu_memory_utilization
+        self.min_available_gpu_memory_mb = min_available_gpu_memory_mb
         self.wait_until_memory_release = wait_until_memory_release
         
         self._port_generator_rng = random.Random(self.seed)
@@ -37,7 +37,7 @@ class VLLMServerHandler(Component):
         self._vllm_server_configs: Optional[Dict[str, Any]] = None
         self._vllm_cleanup_fn: Optional[Callable] = None
     
-    def get_or_create_vllm_server_with_model(self, model_name_or_path: str):
+    def get_or_create_vllm_server_with_model(self, model_name_or_path: str, results_dir: Path) -> Dict[str, Any]:
         """
         Returns configs that contain the API URL and model name of the VLLM Server.
         """
@@ -53,11 +53,10 @@ class VLLMServerHandler(Component):
             self.kill_server()
         
         release_memory()
+        
         init_fn, cleanup_fn = self.get_vllm_init_and_cleanup_fn(
-            results_dir=self.root_dir,
+            results_dir=results_dir,
             model_name_or_path=model_name_or_path,
-            process_index=self.distributed_state.process_index,
-            seed=self.seed,
         )
         self._vllm_server, self._vllm_server_configs = init_fn()
         self._vllm_cleanup_fn = cleanup_fn
@@ -78,17 +77,17 @@ class VLLMServerHandler(Component):
     def get_vllm_init_and_cleanup_fn(
         self,
         results_dir: Path,
-        model_name_or_path: str
+        model_name_or_path: str,
     ) -> Callable[[], Tuple[VLLMServer, Dict[str, Any]]]:
         this_process_device = self.distributed_state.device
-        if self.vllm_min_available_gpu_memory_mb is not None:
+        if self.min_available_gpu_memory_mb is not None:
             total_mem_mb = (
                 torch.cuda.get_device_properties(this_process_device.index).total_memory
                 / 1024**2
             )
-            used_threshold_mb = total_mem_mb - self.vllm_min_available_gpu_memory_mb
+            used_threshold_mb = total_mem_mb - self.min_available_gpu_memory_mb
             logger.info(
-                f"Need at least {self.vllm_min_available_gpu_memory_mb}. "
+                f"Need at least {self.min_available_gpu_memory_mb}. "
                 f"Waiting for GPU{this_process_device.index} used memory to be below {used_threshold_mb} MB. "
                 f"Total GPU memory: {total_mem_mb} MB."
             )
@@ -98,10 +97,10 @@ class VLLMServerHandler(Component):
             )
         
         vllm_server_lazy = self.vllm_server_lazy
-        vllm_gpu_memory_utilization = self.vllm_gpu_memory_utilization
+        gpu_memory_utilization = self.gpu_memory_utilization
         self._set_vllm_ports()
         vllm_port = self._vllm_port
-        if vllm_gpu_memory_utilization == "auto":
+        if gpu_memory_utilization == "auto":
             # Compute the GPU utilization based on amount of remaining memory
             allocated_mem_mb = get_gpu_memory()[self.distributed_state.process_index]
             total_mem_mb = (
@@ -111,10 +110,10 @@ class VLLMServerHandler(Component):
             remaining_mem_mb = (
                 total_mem_mb - allocated_mem_mb
             ) * 0.9  # Allow for 10% tolerance
-            vllm_gpu_memory_utilization = round(remaining_mem_mb / total_mem_mb, 2)
+            gpu_memory_utilization = round(remaining_mem_mb / total_mem_mb, 2)
 
             logger.info(
-                f"GPU #{self.distributed_state.process_index} Auto-computed vLLM GPU memory utilization: {vllm_gpu_memory_utilization}. "
+                f"GPU #{self.distributed_state.process_index} Auto-computed vLLM GPU memory utilization: {gpu_memory_utilization}. "
                 f"Currently Allocated: {allocated_mem_mb} MB, "
                 f"Total: {total_mem_mb} MB, "
                 f"Remaining: {remaining_mem_mb} MB."
@@ -125,13 +124,13 @@ class VLLMServerHandler(Component):
 
             logger.info(
                 f"Rank #{self.distributed_state.process_index} starting vLLM: "
-                f"model={model_name_or_path}   port={vllm_port}   seed={self.seed}"
+                f"model={model_name_or_path}   port={vllm_port}   seed={self.get_process_seed()}"
             )
             t0 = time.time()
             vllm_server = vllm_server_lazy.construct(
-                seed=self.seed,
+                seed=self.get_process_seed(),
                 port=vllm_port,
-                gpu_memory_utilization=vllm_gpu_memory_utilization,
+                gpu_memory_utilization=gpu_memory_utilization,
             )
             server_url = vllm_server.start_server(
                 hf_ckpt_path_or_model=model_name_or_path,
@@ -204,12 +203,3 @@ class VLLMServerHandler(Component):
         logger.info(
             f"Rank {self.distributed_state.process_index} using vLLM port {self._vllm_port}"
         )
-
-class ComponentWithVLLMServer(Component):
-    def __init__(
-        self,
-        vllm_server_handler: VLLMServerHandler,
-        **kwargs
-    ):
-        super().__init__(**kwargs)
-        self.vllm_server_handler = vllm_server_handler

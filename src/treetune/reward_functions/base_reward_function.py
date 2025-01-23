@@ -8,6 +8,9 @@ from treetune.episodes import Episode
 
 
 class RewardFunction(Component):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
     def get_unfinished_response_penalty(self) -> float:
         raise NotImplementedError
 

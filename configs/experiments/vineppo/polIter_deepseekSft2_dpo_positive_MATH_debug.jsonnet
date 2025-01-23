@@ -16,8 +16,10 @@ local sampling_temperature = 0.6;
 + (import 'trainers/dpo_positive_MATH.jsonnet')
 + {
     episode_generator+: {
-        vllm_server+: {
-            swap_space: 8,
+        vllm_server_handler+: {
+            vllm_server+: {
+                swap_space: 8,
+            },
         },
         // Override the task
         type: "math_dpo_positive_episode_generator",
