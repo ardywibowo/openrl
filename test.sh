@@ -4,19 +4,22 @@
 source ./private/keys.sh
 
 # Timeout duration in seconds
-TIMEOUT_DURATION=300  # Set the timeout (e.g., 300 seconds = 5 minutes)
+TIMEOUT_DURATION=450  # Set the timeout in seconds
 
 # List of configuration names
 CONFIG_NAMES=(
   "experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
   "experiments/vineppo/sft_deepseekmath_for_MATH"
-  "experiments/vineppo/polIter_deepseekSft2_ppo_MATH.jsonnet"
-  "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation"
+  "experiments/vineppo/polIter_deepseekSft2_ppo_MATH"
+  "experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
   "experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
   "experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
   "experiments/reward_modeling/reward_modeling_llama2"
-  "experiments/reward_modeling/reward_modeling_llama2_no_value_head_finetune"
+  "experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
 )
+
+# Array to track failed tests
+FAILED_TESTS=()
 
 # Loop through each configuration
 for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
@@ -64,8 +67,14 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
     echo "Killing training job for $CONFIG_NAME (PID $TRAINING_PID) after timeout"
     kill -9 $TRAINING_PID
     echo "Training job for $CONFIG_NAME was terminated before reaching the timeout."
+    FAILED_TESTS+=("$CONFIG_NAME")  # Add to failed tests
   else
     echo "Training job for $CONFIG_NAME ran successfully for the full $((TIMEOUT_DURATION / 60)) minutes."
+    # Check the log file for errors (example of looking for specific errors, modify as needed)
+    if grep -q "Error" "$LOG_FILE"; then
+      echo "Error found in logs for $CONFIG_NAME."
+      FAILED_TESTS+=("$CONFIG_NAME")  # Add to failed tests
+    fi
   fi
 
   # Kill any lingering Python processes
@@ -75,4 +84,12 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
   echo "------------------------------------------"
 done
 
-echo "All training jobs completed."
+# Final report
+if [ ${#FAILED_TESTS[@]} -eq 0 ]; then
+  echo "All tests succeeded!"
+else
+  echo "The following tests failed:"
+  for TEST in "${FAILED_TESTS[@]}"; do
+    echo "- $TEST"
+  done
+fi

@@ -158,7 +158,7 @@ class BinaryClassificationTrainer(MaximumLikelihoodTrainer):
                 attention_mask[:, 0] == 1
             ), "Flash attention models do not support left padding"
             outputs = model(input_ids=input_ids)
-        logits = outputs['value']  # Shape: (batch_size, max_seq_len, vocab_size)
+        logits = outputs['value']  # Shape: (batch_size, max_seq_len)
         orig_dtype = logits.dtype
         
         # Last indexes is the sum of the attention mask
@@ -168,7 +168,7 @@ class BinaryClassificationTrainer(MaximumLikelihoodTrainer):
         logits = logits.to(torch.float32)
 
         # Extract the last logits according to the last indexes
-        last_logits = logits[range(logits.size(0)), last_indexes.long(), :]
+        last_logits = logits[range(logits.size(0)), last_indexes.long()]
 
         # Flatten the tokens
         last_logits = last_logits.view(-1)
