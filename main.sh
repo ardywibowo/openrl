@@ -9,8 +9,8 @@ export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
-CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2"
-# CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
+# CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2"
+CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
 
 CONFIGSTR="configs/${CONFIG_NAME}.jsonnet"
 APP_DIRECTORY="experiments/${CONFIG_NAME}"

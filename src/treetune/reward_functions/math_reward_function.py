@@ -5,7 +5,6 @@ from treetune.episodes import Episode
 from treetune.reward_functions import RewardFunction
 from treetune.tasks import GSM8K, Task
 from treetune.tasks.math import MATH
-from treetune.tokenization_utils import Tokenizer
 
 logger = get_logger(__name__)
 
@@ -14,7 +13,6 @@ logger = get_logger(__name__)
 class MATHRewardFunction(RewardFunction):
     def __init__(
         self,
-        tokenizer: Tokenizer,
         math_task: Task,
         penalize_unfinished_response: bool = False,
         unfinished_response_penalty: float = -1.0,
@@ -23,7 +21,6 @@ class MATHRewardFunction(RewardFunction):
     ):
         super().__init__(**kwargs)
         assert isinstance(math_task, (MATH, GSM8K))
-        self.tokenizer = tokenizer
         self.math_task = math_task
         self.penalize_unfinished_response = penalize_unfinished_response
         self.unfinished_response_penalty = unfinished_response_penalty

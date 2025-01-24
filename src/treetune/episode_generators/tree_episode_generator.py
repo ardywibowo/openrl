@@ -21,7 +21,7 @@ from treetune.episode_generators.path_post_processors import PathPostProcessor
 from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 

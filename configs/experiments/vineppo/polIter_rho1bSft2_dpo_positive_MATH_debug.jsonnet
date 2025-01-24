@@ -130,8 +130,8 @@ local math_validation_inference_pipeline =
     },
 
     tokenizer: {
-    type: 'pretrained',
-    hf_model_name: $.episode_generator.initial_model_name_or_path,
+        type: 'pretrained',
+        hf_model_name: $.episode_generator.initial_model_name_or_path,
     },
     use_deepspeed: true,
 

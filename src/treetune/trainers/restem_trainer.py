@@ -33,7 +33,7 @@ from treetune.common.vllm_server import VLLMServer
 from treetune.common.wandb_utils import get_repo_dir
 from treetune.models.base_model import Model
 from treetune.pipelines import InferencePipeline
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.arguments import TrainingArguments
 from treetune.trainers.base_trainer import Trainer
 from treetune.trainers.data_collator import (COLUMN_ACTOR_SHIFTED_LOGPS,
@@ -350,7 +350,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                         seed=self.args.seed # todo: figure how to path the checkpoint dir
                     )
 
-                    eval_dir = self.experiment_root / "restem_inside_evaluations"
+                    eval_dir = self.root_dir / "restem_inside_evaluations"
                     eval_dir.mkdir(parents=True, exist_ok=True)
 
                     logs_dir = eval_dir / "logs"
@@ -428,7 +428,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
 
                 logger.info(f"(EARLY-STOP) Chosen checkpoint: {chosen_checkpoint}")
                 (chosen_checkpoint / "chosen_checkpoint").touch()
-                (self.experiment_root / "restem_inside_evaluations" / chosen_checkpoint.name / "chosen_checkpoint").touch()
+                (self.root_dir / "restem_inside_evaluations" / chosen_checkpoint.name / "chosen_checkpoint").touch()
 
         from accelerate.utils import broadcast_object_list
         chosen_checkpoint = broadcast_object_list([chosen_checkpoint], from_process=0)[0]

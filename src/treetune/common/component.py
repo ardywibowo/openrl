@@ -6,6 +6,7 @@ from wandb.sdk.wandb_run import Run
 
 from .logging_utils import get_logger
 from .registrable import Registrable
+from .tokenizer import Tokenizer
 
 logger = get_logger(__name__)
 
@@ -16,6 +17,7 @@ class Component(Registrable):
         distributed_state: Optional[PartialState] = None, 
         cloud_logger: Optional[Run] = None,
         root_dir: Optional[Path] = None,
+        tokenizer: Optional[Tokenizer] = None,
         debug_mode: Optional[bool] = False
     ):
         super().__setattr__('_components', {})  # Initialize the component registry
@@ -24,6 +26,7 @@ class Component(Registrable):
         self.distributed_state = distributed_state
         self.cloud_logger = cloud_logger
         self.root_dir = root_dir
+        self.tokenizer = tokenizer
         self.debug_mode = debug_mode
         
         self.root_dir.mkdir(parents=True, exist_ok=True)

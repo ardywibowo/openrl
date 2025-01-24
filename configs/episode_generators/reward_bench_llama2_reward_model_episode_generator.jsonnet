@@ -36,10 +36,6 @@ local question_template = prompt_library.prompt_library.tree.question_template;
                 value_head_dropout: null
             },
 
-            reward_model_tokenizer+: {
-                type: 'pretrained',
-                hf_model_name: hf_model_name,
-            },
             penalize_unfinished_response: true,
             unfinished_response_penalty: 0.0,
         },

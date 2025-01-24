@@ -15,7 +15,7 @@ from treetune.common.py_utils import format_string
 from treetune.inference_strategies.tree_inference import Node
 from treetune.inference_strategies.tree_inference.branch_factor_strategy import \
     BranchFactorStrategy
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 

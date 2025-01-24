@@ -7,6 +7,7 @@ from .lazy import Lazy
 from .params import Params
 from .registrable import Registrable
 from .vllm_server_handler import VLLMServerHandler
+from .tokenizer import Tokenizer, DIPreTrainedTokenizer
 
 assert FromParams
 assert Lazy
@@ -15,6 +16,8 @@ assert Registrable
 assert ConfigurationError
 assert Component
 assert VLLMServerHandler
+assert Tokenizer
+assert DIPreTrainedTokenizer
 
 JsonDict = Dict[str, Any]
 

@@ -34,18 +34,12 @@ class DeepSpeedPolicyTrainer(Trainer):
 
     def __init__(
         self,
-        distributed_state: PartialState,
-        experiment_root: Path,
-        cloud_logger: Optional[WandbRun] = None,
+        **kwargs
     ):
-        self.distributed_state = distributed_state
+        super().__init__(**kwargs)
 
         self.state = TrainerState()
-
-        self.cloud_logger = cloud_logger
-
-        self.experiment_root = experiment_root
-        self.checkpoints_dir = self.experiment_root / "checkpoints"
+        self.checkpoints_dir = self.root_dir / "checkpoints"
         self.checkpoints_dir.mkdir(exist_ok=True, parents=True)
         self._validate_checkpoint_format()
 

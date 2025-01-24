@@ -9,11 +9,10 @@ from accelerate import PartialState
 from datasets import Dataset
 from wandb.sdk.wandb_run import Run
 
-from treetune.common import Component, Lazy, Registrable
+from treetune.common import Component, Lazy, Registrable, Tokenizer
 from treetune.common.logging_utils import get_logger
 from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
 
 logger = get_logger(__name__)
 
@@ -28,13 +27,11 @@ class EpisodeGenerator(Component):
 
     def __init__(
         self,
-        tokenizer: Tokenizer,
         num_episodes_per_iteration: int,
         **kwargs
     ):
         super().__init__(**kwargs)
         self.num_episodes_per_iteration = num_episodes_per_iteration
-        self.tokenizer = tokenizer
 
     def generate(
         self, iteration: Optional[int] = None

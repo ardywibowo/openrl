@@ -2336,7 +2336,7 @@ class PPOTrainer(DeepSpeedPolicyTrainer):
                 shutil.rmtree(episode, ignore_errors=True)
 
             # Remove unnecessary episodes insided experiment_root
-            for episode in self.experiment_root.glob("episodes/episodes_*"):
+            for episode in self.root_dir.glob("episodes/episodes_*"):
                 if not episode.is_dir():
                     continue
 
@@ -2351,7 +2351,7 @@ class PPOTrainer(DeepSpeedPolicyTrainer):
                 shutil.rmtree(episode, ignore_errors=True)
 
             # Remove unnecessary temp_episodes
-            for episode in self.experiment_root.glob("temp_episodes/iteration__*"):
+            for episode in self.root_dir.glob("temp_episodes/iteration__*"):
                 if not episode.is_dir():
                     continue
 

@@ -27,7 +27,7 @@ from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.models.base_model import Model
 from treetune.pipelines.base_inference_pipeline import InferencePipeline
 from treetune.runtime.base_runtime import DistributedRuntime, Runtime
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.base_trainer import Trainer
 from treetune.trainers.deepspeed_policy_trainer import DeepSpeedPolicyTrainer
 from treetune.trainers.policy_trainer import PolicyTrainer
@@ -106,8 +106,8 @@ class PolicyIterationRuntime(DistributedRuntime):
 
     def _init_episode_generator(self):
         self.episode_generator = self.episode_generator.construct(
-            tokenizer=self.tokenizer,
             num_episodes_per_iteration=self.num_episodes_per_iteration,
+            tokenizer=self.tokenizer,
             distributed_state=self.distributed_state,
             debug_mode=self.debug_mode,
             cloud_logger=self.cloud_logger,
@@ -136,12 +136,16 @@ class PolicyIterationRuntime(DistributedRuntime):
     def _construct_trainer(self, init_model_only):
         return self.trainer.construct(
             model=self.model,
-            cloud_logger=self.cloud_logger,
-            distributed_state=self.distributed_state,
-            experiment_root=self.exp_root,
             num_iterations=self.num_iterations,
             num_episodes_per_iteration=self.num_episodes_per_iteration,
             init_model_only=init_model_only,
+            
+            tokenizer=self.tokenizer,
+            distributed_state=self.distributed_state,
+            debug_mode=self.debug_mode,
+            cloud_logger=self.cloud_logger,
+            root_dir=self.exp_root,
+            seed=self.global_vars["seed"],
         )
 
     def only_generate_episodes(self):
@@ -230,7 +234,6 @@ class PolicyIterationRuntime(DistributedRuntime):
                 iteration + 1 == trainer.state.iteration
             ), f"{iteration+1} != {trainer.state.iteration}"
             
-            print(f"WHAT latest_policy_path: {latest_policy_path}, {self.tokenizer}, {is_local_main_process}")
             if (
                 latest_policy_path is not None
                 and self.tokenizer is not None
@@ -238,7 +241,6 @@ class PolicyIterationRuntime(DistributedRuntime):
             ):
                 # Save the tokenizer to enable seamless loading
                 # of the model into vLLM
-                print(f"HELLO Saving tokenizer to {latest_policy_path}")
                 self.tokenizer.save_pretrained(latest_policy_path)
 
             if is_local_main_process:

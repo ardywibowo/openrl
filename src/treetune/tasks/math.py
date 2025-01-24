@@ -11,7 +11,7 @@ from treetune.tasks.math_answer_extraction import (
     extract_math_answer, extract_math_minerva_few_shot_cot_answer)
 from treetune.tasks.math_grader import grade_answer
 from treetune.tasks.math_grader_minerva import eval_math
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 

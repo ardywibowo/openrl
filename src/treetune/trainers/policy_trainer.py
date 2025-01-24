@@ -72,27 +72,24 @@ class PolicyTrainer(Trainer):
         training_args: JsonDict,
         model: Model,
         num_episodes_per_iteration: int,
-        distributed_state: PartialState,
-        experiment_root: Path,
         num_iterations: int = 1,
         num_epochs_per_iteration: int = 1,
         init_model_only: bool = False,
         data_collator: Optional[DataCollator] = None,
         deepspeed_config: Optional[JsonDict] = None,
-        cloud_logger: Optional[WandbRun] = None,
+        **kwargs,
     ):
-        self.distributed_state = distributed_state
+        super().__init__(**kwargs)
+        
         self.args = TrainingArguments(**training_args)
         set_seed(self.args.seed)
 
         if isinstance(model, PeftModel):
             assert (
-                distributed_state.num_processes == 1 and deepspeed_config is None
+                self.distributed_state.num_processes == 1 and deepspeed_config is None
             ), "If PEFT just train on a single GPU with no deepspeed"
 
         self.state = TrainerState()
-
-        self.cloud_logger = cloud_logger
 
         self.num_iterations = num_iterations
         self.num_epochs_per_iteration = num_epochs_per_iteration
@@ -100,8 +97,7 @@ class PolicyTrainer(Trainer):
         self.data_collator = data_collator
         self.init_model_only = init_model_only
 
-        self.experiment_root = experiment_root
-        self.checkpoints_dir = self.experiment_root / "checkpoints"
+        self.checkpoints_dir = self.root_dir / "checkpoints"
         self.checkpoints_dir.mkdir(exist_ok=True, parents=True)
         checkpoint_format = self.get_checkpoint_format()
         assert checkpoint_format.startswith("ckpt--iter_")
@@ -125,7 +121,7 @@ class PolicyTrainer(Trainer):
 
         self.deepspeed_plugin = None
         if deepspeed_config is not None:
-            self.args.world_size = distributed_state.num_processes
+            self.args.world_size = self.distributed_state.num_processes
             from transformers.integrations.deepspeed import \
                 HfTrainerDeepSpeedConfig
 

@@ -22,7 +22,7 @@ from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
 from treetune.reward_functions import RewardFunction
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.data_collator import (COLUMN_ACTOR_SHIFTED_LOGPS,
                                              COLUMN_REF_SHIFTED_LOGPS,
                                              PPODataCollator)

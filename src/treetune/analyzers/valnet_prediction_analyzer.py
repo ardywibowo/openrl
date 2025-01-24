@@ -21,7 +21,7 @@ from treetune.common.wandb_utils import save_inference_result_to_cloud
 from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.policy_trainer import PolicyTrainer
 
 logger = logging_utils.get_logger(__name__)

@@ -16,7 +16,7 @@ from treetune.inference_strategies.tree_inference.answer_extraction import (
 from treetune.inference_strategies.tree_inference.expansion import NodeExpander
 from treetune.inference_strategies.tree_inference_strategy import GuidanceLLM
 from treetune.tasks import Task
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
