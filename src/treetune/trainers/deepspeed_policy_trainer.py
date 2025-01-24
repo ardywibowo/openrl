@@ -392,6 +392,9 @@ class DeepSpeedPolicyTrainer(Trainer):
         checkpoint_path = self.checkpoints_dir / f"{checkpoint_name}"
 
         self._save_checkpoint(checkpoint_path, **kwargs)
+        
+        if self.is_main_process():
+            self.tokenizer.save_pretrained(checkpoint_path)
 
         if self._can_log_to_cloud():
             self.cloud_logger.summary["last_checkpoint"] = str(checkpoint_name)

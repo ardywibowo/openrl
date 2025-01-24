@@ -306,6 +306,9 @@ class PolicyTrainer(Trainer):
                 # For LoRA model we also use 'save_pretrained', which only saves the lora weights
                 # During evaluation, we compute full model weights.
                 model.save_pretrained(hf_checkpoint_path, safe_serialization=False)
+            
+            if self.is_main_process():
+                self.tokenizer.save_pretrained(hf_checkpoint_path)
 
         self.accelerator.save_state(
             str(checkpoint_path)
