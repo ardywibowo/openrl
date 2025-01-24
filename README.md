@@ -42,10 +42,10 @@ bash setup.sh
 
 ### Running Experiments
 
-Once you have selected the configuration file, you can run various experiments configured in the [configs/experiments](https://github.com/ardywibowo/openrl/configs/experiments) folder. An example script is provided in `run.sh`. Please replace the `HF_TOKEN` and `WANDB_API_KEY` with your own tokens.
+Once you have selected the configuration file, you can run various experiments configured in the [configs/experiments](https://github.com/ardywibowo/openrl/configs/experiments) folder. An example script is provided in `main.sh`. Please replace the `HF_TOKEN` and `WANDB_API_KEY` with your own tokens.
 
 ```bash
-bash run.sh
+bash main.sh
 ```
 
 *Refer to `src/treetune/runtime/policy_iteration_runtime.py` if you'd like to start reading the codebase.*

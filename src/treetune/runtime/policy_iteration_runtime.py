@@ -229,7 +229,8 @@ class PolicyIterationRuntime(DistributedRuntime):
             assert (
                 iteration + 1 == trainer.state.iteration
             ), f"{iteration+1} != {trainer.state.iteration}"
-
+            
+            print(f"WHAT latest_policy_path: {latest_policy_path}, {self.tokenizer}, {is_local_main_process}")
             if (
                 latest_policy_path is not None
                 and self.tokenizer is not None
@@ -237,6 +238,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             ):
                 # Save the tokenizer to enable seamless loading
                 # of the model into vLLM
+                print(f"HELLO Saving tokenizer to {latest_policy_path}")
                 self.tokenizer.save_pretrained(latest_policy_path)
 
             if is_local_main_process:

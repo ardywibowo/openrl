@@ -2,22 +2,10 @@ import collections.abc
 import inspect
 from copy import deepcopy
 from pathlib import Path
-from typing import (
-    Callable,
-    cast,
-    Dict,
-    Iterable,
-    List,
-    Mapping,
-    Set,
-    Tuple,
-    Type,
-    TypeVar,
-    Union,
-    Optional,
-)
+from typing import (Callable, Dict, Iterable, List, Mapping, Optional, Set,
+                    Tuple, Type, TypeVar, Union, cast)
 
-import logging_utils
+from . import logging_utils
 from .lazy import Lazy
 from .params import Params
 
@@ -215,7 +203,8 @@ def is_base_registrable(cls) -> bool:
     Checks whether this is a class that directly inherits from Registrable, or is a subclass of such
     a class.
     """
-    from treetune.common.registrable import Registrable  # import here to avoid circular imports
+    from treetune.common.registrable import \
+        Registrable  # import here to avoid circular imports
 
     if not issubclass(cls, Registrable):
         return False
@@ -744,9 +733,8 @@ class FromParams(CustomDetHash):
         constructor (because you inspect `__init__`, but call `cls()`).
         """
 
-        from treetune.common.registrable import (
-            Registrable,
-        )  # import here to avoid circular imports
+        from treetune.common.registrable import \
+            Registrable  # import here to avoid circular imports
 
         logger.debug(
             f"instantiating class {cls} from params {getattr(params, 'params', params)} "

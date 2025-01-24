@@ -17,7 +17,7 @@ import os
 import subprocess
 import time
 
-import logging_utils
+from . import logging_utils
 
 logger = logging_utils.get_logger(__name__)
 

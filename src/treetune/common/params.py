@@ -30,7 +30,7 @@ except ImportError:
         return expr
 
 
-import logging_utils
+from . import logging_utils
 logger = logging_utils.get_logger(__name__)
 logger.setLevel(logging.WARNING)
 

@@ -291,6 +291,8 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             model_name_or_path=hf_ckpt_path_or_model,
             results_root_dir=results_dir
         )
+        
+        self.distributed_state.wait_for_everyone()
 
         self._metrics["timing/episode_generation/inference"] = time.time() - t0
 
@@ -375,13 +377,14 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
 
         self._save_generations_to_cloud(temp_dir, iteration)
         self._clean_up_temp_dir(temp_dir)
-
         self.distributed_state.wait_for_everyone()
         
         metrics = self.gather_metrics()
         if len(metrics) > 0:
             metrics["train/global_iteration"] = iteration
             self._cloud_log(metrics)
+        
+        self.distributed_state.wait_for_everyone()
         return episodes
 
     def _run_inference(

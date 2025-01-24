@@ -1,11 +1,11 @@
 from enum import Enum
-from typing import Dict, Any
+from typing import Any, Dict
 
-from .from_params import FromParams, ConfigurationError
+from .component import Component
+from .from_params import ConfigurationError, FromParams
 from .lazy import Lazy
 from .params import Params
 from .registrable import Registrable
-from .component import Component
 from .vllm_server_handler import VLLMServerHandler
 
 assert FromParams

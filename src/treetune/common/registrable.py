@@ -23,7 +23,7 @@ from typing import (
 
 from .from_params import FromParams, ConfigurationError
 
-import logging_utils
+from . import logging_utils
 logger = logging_utils.get_logger(__name__)
 
 _T = TypeVar("_T")

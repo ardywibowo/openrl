@@ -3,13 +3,13 @@
 source ./private/keys.sh
 
 export TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
-CONFIG_NAME="experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
+# CONFIG_NAME="experiments/vineppo/polIter_deepseekSft2_vineppo_MATH"
 # CONFIG_NAME="experiments/vineppo/sft_deepseekmath_for_MATH"
 # CONFIG_NAME="experiments/vineppo/polIter_deepseekSft2_ppo_MATH"
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_paragraph_generation_claude_distill"
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_answer_extraction_claude_distill"
 # CONFIG_NAME="experiments/linguistic_calibration/sft_llama2_for_probability_forecasting_claude_distill"
-# CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2"
+CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2"
 # CONFIG_NAME="experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
 
 CONFIGSTR="configs/${CONFIG_NAME}.jsonnet"
