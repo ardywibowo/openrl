@@ -3,8 +3,8 @@
 # hence, this empty class
 from typing import Optional
 
-from treetune.runtime import Runtime, PolicyIterationRuntime
-from treetune.logging_utils import get_logger
+from treetune.common.logging_utils import get_logger
+from treetune.runtime import PolicyIterationRuntime, Runtime
 from treetune.runtime.base_runtime import DistributedRuntime
 
 logger = get_logger(__name__)

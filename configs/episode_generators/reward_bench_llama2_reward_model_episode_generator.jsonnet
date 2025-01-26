@@ -1,14 +1,13 @@
-local math_task = (import '../tasks/math.jsonnet') + {
-    prepend_in_context_few_shot: false,
-    ensure_fit_in_context_size: false,
-};
+local hf_model_name = "experiments/reward_modeling_llama2_20250123_210003/checkpoints/ckpt--iter_0002--epoch_1.00--step_0047/hf_pretrained/";
 
-local prompt_library = (import '../prompt_library/MATH_step_by_step_sft.jsonnet');
+local reward_bench_task = (import '../tasks/reward_bench.jsonnet');
+
+local prompt_library = (import '../prompt_library/reward_bench_step_by_step_sft.jsonnet');
 local question_template = prompt_library.prompt_library.tree.question_template;
 
 {
     episode_generator+: {
-        type: 'math_episode_generator',
+        type: 'episode_generator_with_reward_function',
 
         append_bos_to_query: true,
         append_eos_to_response: true,
@@ -27,13 +26,19 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         },
 
         reward_function: {
-            type: 'math_reward_function',
+            type: 'model_based_reward_function',
+            reward_model+: {
+                type: 'pretrained_causal_lm_with_value_head',
+                pretrained_backbone_model: {
+                    type: 'pretrained_causal_lm',
+                    hf_model_name: hf_model_name,
+                },
+                value_head_dropout: null
+            },
+
             penalize_unfinished_response: true,
             unfinished_response_penalty: 0.0,
-            math_task: $.episode_generator.task,
         },
-        reasoning_step_delimiter: '\n',
-        answer_prefix: '\n\n# Answer\n',
 
         // max_sequence_length: 2048,
         max_sequence_length: 4096,
@@ -42,6 +47,6 @@ local question_template = prompt_library.prompt_library.tree.question_template;
 
         fill_missing_episodes: true,
 
-        task: math_task,
+        task: reward_bench_task,
     },
 }

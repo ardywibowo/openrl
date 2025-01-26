@@ -5,15 +5,13 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from datasets import Dataset, DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 from treetune.tasks.math_answer_extraction import (
-    extract_math_minerva_few_shot_cot_answer,
-    extract_math_answer,
-)
+    extract_math_answer, extract_math_minerva_few_shot_cot_answer)
 from treetune.tasks.math_grader import grade_answer
 from treetune.tasks.math_grader_minerva import eval_math
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
@@ -226,7 +224,7 @@ class MATH(Task):
             output = {}
             if prepend_in_context_few_shot:
                 # Generate a seed based on the example's index for reproducibility.
-                init_seed = example["_treetune__idx"]
+                init_seed = example["__uuid__"]
 
                 num_tries = 0
                 while num_tries < max_retries:
@@ -426,7 +424,8 @@ class MATH(Task):
     def _split_solution_into_intermediate_steps_minerva(
         self, solution: str
     ) -> List[int]:
-        from treetune.tasks.math_extract_steps_inplace import split_solution_inplace
+        from treetune.tasks.math_extract_steps_inplace import \
+            split_solution_inplace
 
         if self.answer_prefix is None:
             return split_solution_inplace(solution)

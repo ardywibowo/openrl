@@ -1,15 +1,15 @@
 import json
 import uuid
-from typing import Any, Dict, List, Union, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import evaluate
 import numpy as np
 from datasets import Dataset
 
-from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators import EpisodeGeneratorWithRewardFunction
+from treetune.common.logging_utils import get_logger
+from treetune.episode_generators import (EpisodeGenerator,
+                                         EpisodeGeneratorWithRewardFunction)
 from treetune.episodes import Episode
-from treetune.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -98,7 +98,7 @@ class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to tokenize query and response for instance {instance['_treetune__idx']}: {e}"
+                        f"Failed to tokenize query and response for instance {instance['__uuid__']}: {e}"
                     )
                     logger.error(f"Query: {query_text}")
                     logger.error(f"Response: {response_text}")
@@ -124,7 +124,7 @@ class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
 
                 if len(response_token_ids) == 0:
                     logger.warning(
-                        f"Response token ids are empty for instance {instance['_treetune__idx']}"
+                        f"Response token ids are empty for instance {instance['__uuid__']}"
                     )
                     metrics.setdefault("empty_response", []).append(True)
                     continue

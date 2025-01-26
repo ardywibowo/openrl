@@ -1,18 +1,17 @@
-import random
 import json
-from typing import List, Union, Dict, Any, Tuple, Optional
+import random
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from datasets import Dataset
 
-from treetune.common import Registrable, Lazy
+from treetune.common import Lazy, Registrable
+from treetune.common.logging_utils import get_logger
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
-from treetune.episodes import Episode
-from treetune.episode_generators.on_policy_episode_generator import (
-    OnPolicyEpisodeGenerator,
-)
+from treetune.episode_generators.on_policy_episode_generator import \
+    OnPolicyEpisodeGenerator
 from treetune.episode_generators.tree_episode_generator import TreeEpisodeUtils
+from treetune.episodes import Episode
 from treetune.reward_functions import RewardFunction
-from treetune.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -26,7 +25,13 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.reward_function = reward_function.construct(tokenizer=self.tokenizer)
+        self.reward_function = reward_function.construct(
+            seed=self.seed,
+            distributed_state=self.distributed_state,
+            cloud_logger=self.cloud_logger,
+            root_dir= self.root_dir / "reward_function",
+            tokenizer=self.tokenizer
+        )
         self.append_bos_to_query = append_bos_to_query
         self.append_eos_to_response = append_eos_to_response
 
@@ -34,38 +39,24 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         self, inference_results: Dataset, iteration: int
     ) -> List[Union[Dict[str, Any], Episode]]:
         episodes_without_rewards = []
-        instances = []
-        paths = []
         for instance in inference_results:
-            episodes, curr_instances, curr_paths = self._convert_to_episodes(instance)
+            episodes = self._convert_to_episodes(instance)
             episodes_without_rewards.extend(episodes)
-            instances.extend(curr_instances)
-            paths.extend(curr_paths)
         
-        episodes, metrics = self.reward_function.batch_compute_rewards(
-            episodes_without_rewards, 
-            instances, 
-            paths
-        )
-        self._cloud_log({
-            **metrics,
-            "train/global_iteration": iteration
-        })
+        episodes = self.reward_function.batch_compute_rewards(
+            episodes_without_rewards)
 
         return episodes
 
     def _convert_to_episodes(self, instance: Dict[str, Any]) -> List[Episode]:
         tree = json.loads(instance["_treetune__reasoning_tree"])
         paths = self.extract_paths_from_tree(tree)
-
+        
         episodes = []
-        instances = []
         for path in paths:
-            episodes.append(self._convert_path_to_episode(instance, path))
-            instances.append(instance)
-            paths.append(path)
-
-        return episodes, instances, paths
+            episodes.extend(self._convert_path_to_episode(instance, path))
+        
+        return episodes
 
     def _convert_path_to_episode(
         self, instance: Dict[str, Any], path: Dict[str, Any]
@@ -85,7 +76,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             )
         except Exception as e:
             logger.error(
-                f"Failed to tokenize query and response for instance {instance['_treetune__idx']}"
+                f"Failed to tokenize query and response for instance {instance['__uuid__']}"
             )
             logger.error(f"Query: {query_text}")
             logger.error(f"Response: {response_text}")
@@ -94,9 +85,11 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         episode = Episode(
             query_token_ids=query_token_ids,
             response_token_ids=response_token_ids,
+            query_text=query_text,
+            response_text=response_text,
             scores=None,
         )
-        return episode
+        return [episode]
 
     def _tokenize_query_and_response(
         self, query: str, response: str, allow_append_eos: bool = True

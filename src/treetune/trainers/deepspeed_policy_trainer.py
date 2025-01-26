@@ -1,27 +1,26 @@
 import logging
 from pathlib import Path
-from typing import Optional, Tuple, List
-from typing import Union
+from typing import List, Optional, Tuple, Union
 from weakref import WeakValueDictionary
 
 import deepspeed
 from accelerate import PartialState
-from accelerate.checkpointing import save_custom_state, load_custom_state
+from accelerate.checkpointing import load_custom_state, save_custom_state
 from accelerate.utils import DummyOptim, DummyScheduler
 from datasets import Dataset
 from deepspeed import DeepSpeedEngine
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
-from transformers import PreTrainedModel, get_scheduler, PretrainedConfig
+from transformers import PretrainedConfig, PreTrainedModel, get_scheduler
 from transformers.integrations import HfTrainerDeepSpeedConfig
 from wandb.sdk.wandb_run import Run as WandbRun
 
 from treetune.common import JsonDict
+from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import log_tensors_living_on_gpu
-from treetune.logging_utils import get_logger
 from treetune.trainers.arguments import TrainingArguments
 from treetune.trainers.base_trainer import Trainer
-from treetune.trainers.policy_trainer import TrainerState, Checkpoint
+from treetune.trainers.policy_trainer import Checkpoint, TrainerState
 
 logger = get_logger(__name__)
 
@@ -35,18 +34,12 @@ class DeepSpeedPolicyTrainer(Trainer):
 
     def __init__(
         self,
-        distributed_state: PartialState,
-        experiment_root: Path,
-        cloud_logger: Optional[WandbRun] = None,
+        **kwargs
     ):
-        self.distributed_state = distributed_state
+        super().__init__(**kwargs)
 
         self.state = TrainerState()
-
-        self.cloud_logger = cloud_logger
-
-        self.experiment_root = experiment_root
-        self.checkpoints_dir = self.experiment_root / "checkpoints"
+        self.checkpoints_dir = self.root_dir / "checkpoints"
         self.checkpoints_dir.mkdir(exist_ok=True, parents=True)
         self._validate_checkpoint_format()
 
@@ -399,6 +392,9 @@ class DeepSpeedPolicyTrainer(Trainer):
         checkpoint_path = self.checkpoints_dir / f"{checkpoint_name}"
 
         self._save_checkpoint(checkpoint_path, **kwargs)
+        
+        if self.is_main_process():
+            self.tokenizer.save_pretrained(checkpoint_path)
 
         if self._can_log_to_cloud():
             self.cloud_logger.summary["last_checkpoint"] = str(checkpoint_name)

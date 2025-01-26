@@ -1,6 +1,6 @@
 from datasets import DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 
 logger = logging_utils.get_logger(__name__)
@@ -21,7 +21,6 @@ class RewardBench(Task):
             map_fn,
             num_proc=4,
             batched=True, 
-            remove_columns=train_dataset.column_names,
             desc="Preprocessing examples"
         )
         

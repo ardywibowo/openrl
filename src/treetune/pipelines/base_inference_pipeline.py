@@ -3,19 +3,18 @@ import json
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 from datasets import Dataset
 from wandb.sdk.wandb_run import Run
 
 from treetune.analyzers import Analyzer
-from treetune.common import Registrable, Lazy, JsonDict, Params
+from treetune.common import JsonDict, Lazy, Params, Registrable
+from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import need_to_minimize_stored_files
-from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
+from treetune.inference_strategies.base_inference_strategy import \
+    InferenceStrategy
 from treetune.tasks.base_task import Task
-
-from treetune.logging_utils import get_logger
-
 
 logger = get_logger(__name__)
 

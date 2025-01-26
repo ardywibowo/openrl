@@ -2,9 +2,9 @@ from collections import defaultdict
 from typing import Any, Dict
 
 import pandas as pd
-from datasets import DatasetDict, Dataset, load_dataset
+from datasets import Dataset, DatasetDict, load_dataset
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
 
 logger = logging_utils.get_logger(__name__)
@@ -40,7 +40,6 @@ class ProbabilityForecasting(Task):
             map_fn,
             num_proc=4,
             batched=True, 
-            remove_columns=train_ds.column_names,
             desc="Preprocessing examples"
         )
         

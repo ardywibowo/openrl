@@ -3,7 +3,7 @@ import os
 import pickle
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -11,8 +11,8 @@ import wandb
 from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
 from treetune.analyzers.analyzer import Analyzer
+from treetune.common import logging_utils
 from treetune.common.py_utils import need_to_minimize_stored_files
 
 logger = logging_utils.get_logger(__name__)
@@ -27,7 +27,8 @@ class MCAdvantageDistributionAnalyzer(Analyzer):
         max_num_iterations: Optional[int] = None,
         **kwargs,
     ):
-        from treetune.runtime.policy_iteration_runtime import PolicyIterationRuntime
+        from treetune.runtime.policy_iteration_runtime import \
+            PolicyIterationRuntime
 
         assert isinstance(runtime, PolicyIterationRuntime)
         self.runtime: PolicyIterationRuntime = runtime

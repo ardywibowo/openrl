@@ -13,7 +13,7 @@ from tqdm import tqdm
 from transformers import PreTrainedModel
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy
 from treetune.trainers.data_collator import (

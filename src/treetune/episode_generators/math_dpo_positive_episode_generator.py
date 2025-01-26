@@ -1,18 +1,17 @@
 # REST(EM) Beyond Human Data: Scaling Self-Training for Problem-Solving with Language Models https://arxiv.org/abs/2312.06585
 import json
 import random
-from dataclasses import dataclass, asdict
-from typing import Any, Dict, Union, List, Optional
+from dataclasses import asdict, dataclass
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import wandb
 from datasets import Dataset
-
-from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
-from treetune.episodes import Episode, DPOPositiveEpisode
-from treetune.logging_utils import get_logger
-
 from tqdm import tqdm
+
+from treetune.common.logging_utils import get_logger
+from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
+from treetune.episodes import DPOPositiveEpisode, Episode
 
 logger = get_logger(__name__)
 
@@ -47,7 +46,7 @@ class MATHDPOPositiveEpisodeGenerator(MathEpisodeGenerator):
 
             tree = json.loads(instance["_treetune__reasoning_tree"])
 
-            idx = instance["_treetune__idx"]
+            idx = instance["__uuid__"]
             assert idx not in encountered_question_indices, f"Question {idx} is encountered more than once in inference_result."
             encountered_question_indices.append(idx)
 
@@ -94,7 +93,7 @@ class MATHDPOPositiveEpisodeGenerator(MathEpisodeGenerator):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to tokenize query and response for instance {instance['_treetune__idx']}: {e}"
+                        f"Failed to tokenize query and response for instance {instance['__uuid__']}: {e}"
                     )
                     logger.error(f"Query: {query_text}")
                     logger.error(f"Response: {response_text}")
@@ -122,7 +121,7 @@ class MATHDPOPositiveEpisodeGenerator(MathEpisodeGenerator):
 
                 if len(response_token_ids) == 0:
                     logger.warning(
-                        f"Response token ids are empty for instance {instance['_treetune__idx']}"
+                        f"Response token ids are empty for instance {instance['__uuid__']}"
                     )
                     metrics.setdefault("empty_response", []).append(True)
                     continue

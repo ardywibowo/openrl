@@ -5,9 +5,9 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from datasets import Dataset, DatasetDict
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
@@ -203,7 +203,7 @@ class LinguisticCalibration(Task):
             output = {}
             if prepend_in_context_few_shot:
                 # Generate a seed based on the example's index for reproducibility.
-                init_seed = example["_treetune__idx"]
+                init_seed = example["__uuid__"]
 
                 num_tries = 0
                 while num_tries < max_retries:

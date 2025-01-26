@@ -1,15 +1,9 @@
-from typing import Any, Optional, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
-from datasets import (
-    Dataset,
-    DatasetDict,
-    IterableDataset,
-    IterableDatasetDict,
-    load_dataset,
-)
+from datasets import (Dataset, DatasetDict, IterableDataset,
+                      IterableDatasetDict, load_dataset)
 
-from treetune import logging_utils
-from treetune.common import Registrable
+from treetune.common import Registrable, logging_utils
 
 logger = logging_utils.get_logger(__name__)
 
@@ -102,7 +96,7 @@ class Task(Registrable):
 
         # Add idx column
         data_source = data_source.map(
-            lambda example, idx: {"_treetune__idx": idx},
+            lambda example, idx: {"__uuid__": idx},
             with_indices=True,
             num_proc=self.hf_num_proc,
             desc="Adding idx column",

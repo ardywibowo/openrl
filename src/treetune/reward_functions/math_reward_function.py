@@ -1,11 +1,10 @@
-from typing import Any, Dict, Optional, Tuple, List
+from typing import Any, Dict, List, Optional, Tuple
 
-from treetune.reward_functions import RewardFunction
-from treetune.logging_utils import get_logger
-from treetune.tasks import Task, GSM8K
-from treetune.tasks.math import MATH
-from treetune.tokenization_utils import Tokenizer
+from treetune.common.logging_utils import get_logger
 from treetune.episodes import Episode
+from treetune.reward_functions import RewardFunction
+from treetune.tasks import GSM8K, Task
+from treetune.tasks.math import MATH
 
 logger = get_logger(__name__)
 
@@ -14,14 +13,14 @@ logger = get_logger(__name__)
 class MATHRewardFunction(RewardFunction):
     def __init__(
         self,
-        tokenizer: Tokenizer,
         math_task: Task,
         penalize_unfinished_response: bool = False,
         unfinished_response_penalty: float = -1.0,
         timeout: Optional[int] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         assert isinstance(math_task, (MATH, GSM8K))
-        self.tokenizer = tokenizer
         self.math_task = math_task
         self.penalize_unfinished_response = penalize_unfinished_response
         self.unfinished_response_penalty = unfinished_response_penalty

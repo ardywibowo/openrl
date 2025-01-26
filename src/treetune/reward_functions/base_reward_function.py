@@ -1,13 +1,16 @@
-from typing import Any, Dict, List, Tuple, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from accelerate import PartialState
 from wandb.sdk.wandb_run import Run
 
-from treetune.common import Registrable
+from treetune.common import Component, Registrable
 from treetune.episodes import Episode
 
 
-class RewardFunction(Registrable):
+class RewardFunction(Component):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+    
     def get_unfinished_response_penalty(self) -> float:
         raise NotImplementedError
 

@@ -19,17 +19,16 @@ from transformers import (BatchEncoding, Pipeline, PreTrainedModel,
                           PreTrainedTokenizer, pipeline)
 
 from treetune.common import Lazy
+from treetune.common.logging_utils import get_logger
 from treetune.episode_generators.base_episode_generator import (
     Episode, EpisodeGenerator)
-from treetune.reward_functions import RewardFunction
 from treetune.episode_generators.on_policy_episode_generator import \
     OnPolicyEpisodeGenerator
 from treetune.episode_generators.tree_episode_generator import TreeEpisodeUtils
-from treetune.logging_utils import get_logger
 from treetune.models import Model
+from treetune.reward_functions import RewardFunction
 from treetune.tasks import GSM8K, Task
 from treetune.tasks.math import MATH
-from treetune.tokenization_utils import Tokenizer
 
 logger = get_logger(__name__)
 
@@ -39,7 +38,6 @@ class ModelBasedRewardFunction(RewardFunction):
     def __init__(
         self,
         reward_model: Optional[Lazy[Model]] = None,
-        reward_model_tokenizer: Optional[Tokenizer] = None,
         reward_model_padding_side: str = "right",
         reward_pipeline_model_name: Optional[str] = None,
         reward_pipeline_task: str = "sentiment-analysis",
@@ -48,7 +46,9 @@ class ModelBasedRewardFunction(RewardFunction):
         cache_reward_model_on_cpu: bool = False,
         temp_cache_dir: Optional[str] = None,
         unfinished_response_penalty: Optional[float] = None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         # `reward_model` and `reward_pipeline_model_name` are mutually exclusive
         if reward_model is not None and reward_pipeline_model_name is not None:
             raise ValueError(
@@ -60,11 +60,9 @@ class ModelBasedRewardFunction(RewardFunction):
             )
 
         if reward_model is not None:
-            assert reward_model_tokenizer is not None
             assert reward_model_padding_side in ["left", "right"]
 
         self.reward_model_lazy = reward_model
-        self.reward_model_tokenizer = reward_model_tokenizer
         self.reward_model_padding_side = reward_model_padding_side
         self.reward_pipeline_model_name = reward_pipeline_model_name
         self.reward_pipeline_task = reward_pipeline_task

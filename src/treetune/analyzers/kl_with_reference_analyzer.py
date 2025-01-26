@@ -1,29 +1,31 @@
 import copy
 import json
+import random
 from dataclasses import asdict
 from pathlib import Path
-import random
-from typing import Union, Optional, Tuple, List, Dict, Any
-from tqdm import tqdm
+from typing import Any, Dict, List, Optional, Tuple, Union
+
 import torch
 from accelerate.utils import release_memory
 from datasets import Dataset
 from deepspeed import DeepSpeedEngine
+from tqdm import tqdm
 from transformers import PreTrainedModel
 from wandb.apis.public import Run
 
 from treetune.analyzers.analyzer import Analyzer
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.common.deepspeed_utils import prepare_data_loader_for_inference
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators import TreeEpisodeUtils
 from treetune.episodes import Episode
-from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
+from treetune.reward_functions import RewardFunction
 from treetune.tasks import Task
-from treetune import logging_utils
-from treetune.trainers.data_collator import PPODataCollator, COLUMN_REF_SHIFTED_LOGPS, COLUMN_ACTOR_SHIFTED_LOGPS
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
+from treetune.trainers.data_collator import (COLUMN_ACTOR_SHIFTED_LOGPS,
+                                             COLUMN_REF_SHIFTED_LOGPS,
+                                             PPODataCollator)
 from treetune.trainers.deepspeed_policy_trainer import DeepSpeedPolicyTrainer
 
 logger = logging_utils.get_logger(__name__)
@@ -46,7 +48,8 @@ class KLWithReferenceAnalyzer(Analyzer):
         max_sequence_length: Optional[int] = None,
         **kwargs
     ):
-        from treetune.runtime.policy_iteration_runtime import PolicyIterationRuntime
+        from treetune.runtime.policy_iteration_runtime import \
+            PolicyIterationRuntime
         self.runtime: PolicyIterationRuntime = runtime
         super().__init__(cloud_logger, runtime, **kwargs)
 
@@ -283,7 +286,7 @@ class KLWithReferenceAnalyzer(Analyzer):
 
             tree = json.loads(instance["_treetune__reasoning_tree"])
 
-            idx = instance["_treetune__idx"]
+            idx = instance["__uuid__"]
             assert idx not in encountered_question_indices, f"Question {idx} is encountered more than once."
             encountered_question_indices.append(idx)
 
@@ -317,7 +320,7 @@ class KLWithReferenceAnalyzer(Analyzer):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to tokenize query and response for instance {instance['_treetune__idx']}: {e}"
+                        f"Failed to tokenize query and response for instance {instance['__uuid__']}: {e}"
                     )
                     logger.error(f"Query: {query_text}")
                     logger.error(f"Response: {response_text}")

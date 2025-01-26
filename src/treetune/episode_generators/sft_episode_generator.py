@@ -1,13 +1,13 @@
 import random
-from typing import List, Dict, Any, Tuple, Union
+from typing import Any, Dict, List, Tuple, Union
 
 from datasets import Dataset
 from tqdm import tqdm
 
+from treetune.common.logging_utils import get_logger
 from treetune.common.py_utils import format_string
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.episodes import Episode
-from treetune.logging_utils import get_logger
 from treetune.tasks.base_task import Task
 
 logger = get_logger(__name__)
@@ -148,6 +148,8 @@ class SFTEpisodeGenerator(EpisodeGenerator):
         return Episode(
             query_token_ids=query_token_ids,
             response_token_ids=response_token_ids,
+            query_text=query,
+            response_text=response,
             reward=1.0,
             advantages=advantages,
         )

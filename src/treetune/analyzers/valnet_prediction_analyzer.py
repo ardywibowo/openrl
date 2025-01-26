@@ -12,7 +12,7 @@ from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy
 from treetune.common.py_utils import need_to_minimize_stored_files
@@ -21,7 +21,7 @@ from treetune.common.wandb_utils import save_inference_result_to_cloud
 from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.policy_trainer import PolicyTrainer
 
 logger = logging_utils.get_logger(__name__)
@@ -314,7 +314,7 @@ class ValNetPredictionAnalyzer(Analyzer):
         results_path: Path,
         seed: int,
     ) -> Dataset:
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         vllm_server = self.vllm_server_lazy.construct(seed=42)
@@ -402,7 +402,7 @@ class ValNetPredictionAnalyzer(Analyzer):
                         "is_last_step": False,
                         "total_steps": len(step_end_indices),
                         "is_complete_response": is_complete_response,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -437,7 +437,7 @@ class ValNetPredictionAnalyzer(Analyzer):
                         "is_complete_response": True,
                         "gt_value": ep["scores"],
                         "episode_idx": ep_idx,
-                        "_treetune__idx": ep_idx,
+                        "__uuid__": ep_idx,
                     }
                 )
 

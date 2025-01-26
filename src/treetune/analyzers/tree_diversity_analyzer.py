@@ -8,7 +8,7 @@ import evaluate
 from datasets import Dataset
 from evaluate import EvaluationModule
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers import Analyzer
 
 logger = logging_utils.get_logger(__name__)

@@ -1,27 +1,22 @@
 import copy
 import gc
 import json
-import os
-import random
-import tempfile
 from pathlib import Path
-from typing import List, Optional, Tuple, Dict, Callable, Any
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import wandb
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
 from treetune.analyzers.analyzer import Analyzer
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.vllm_server import VLLMServer
 from treetune.common.wandb_utils import save_inference_result_to_cloud
-from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
+from treetune.reward_functions import RewardFunction
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
 from treetune.trainers.policy_trainer import PolicyTrainer
 
 logger = logging_utils.get_logger(__name__)
@@ -34,7 +29,8 @@ class RestemUploadChosenCheckpoint(Analyzer):
         runtime,
         **kwargs,
     ):
-        from treetune.runtime.policy_iteration_runtime import PolicyIterationRuntime
+        from treetune.runtime.policy_iteration_runtime import \
+            PolicyIterationRuntime
 
         assert isinstance(runtime, PolicyIterationRuntime)
         self.runtime: PolicyIterationRuntime = runtime

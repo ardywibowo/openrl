@@ -1,20 +1,21 @@
 import asyncio
 import json
-from typing import List, Optional, Dict, Any
+from typing import Any, Dict, List, Optional
 
 from datasets import Dataset
 
 import guidance
 from guidance.llms import OpenAI, OpenAIVLLM
-from treetune import logging_utils
-from treetune.common import guidance_utils as gu, Registrable, Lazy
-from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
+from treetune.common import Lazy, Registrable
+from treetune.common import guidance_utils as gu
+from treetune.common import logging_utils
+from treetune.inference_strategies.base_inference_strategy import \
+    InferenceStrategy
 from treetune.inference_strategies.tree_inference import Node
-from treetune.inference_strategies.tree_inference.answer_extraction import (
-    AnswerExtractor,
-)
+from treetune.inference_strategies.tree_inference.answer_extraction import \
+    AnswerExtractor
 from treetune.inference_strategies.tree_inference.expansion import NodeExpander
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
@@ -193,7 +194,7 @@ class TreeInferenceStrategy(InferenceStrategy):
             dataset,
             desc="Creating concurrent asyncio tasks for tree construction...",
         ):
-            instance_idx = data_instance["_treetune__idx"]
+            instance_idx = data_instance["__uuid__"]
 
             if not self.no_cache:
                 tree_file_path = self.get_tree_instance_path(instance_idx)
@@ -249,7 +250,7 @@ class TreeInferenceStrategy(InferenceStrategy):
                 )
 
         trees = [
-            trees[idx] for idx in dataset["_treetune__idx"]
+            trees[idx] for idx in dataset["__uuid__"]
         ]  # change order back to original
         assert len(trees) == len(
             dataset

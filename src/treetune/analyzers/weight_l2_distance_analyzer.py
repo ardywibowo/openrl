@@ -5,7 +5,7 @@ from tqdm import tqdm
 from transformers import PreTrainedModel
 from wandb.sdk.wandb_run import Run
 
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.analyzers.analyzer import Analyzer
 from treetune.trainers.policy_trainer import PolicyTrainer
 

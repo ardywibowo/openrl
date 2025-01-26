@@ -7,15 +7,14 @@ import pickle
 import random
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Union
+from typing import Any, Dict, List, Optional, Union
 
 from accelerate.utils import release_memory
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 
-from treetune import logging_utils
 from treetune.analyzers import ValNetPredictionAnalyzer
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.inference_strategies import InferenceStrategy
@@ -285,7 +284,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
                         "total_steps": len(step_end_indices),
                         "is_complete_response": is_complete_response,
                         "step_end_indices": step_end_indices,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -387,7 +386,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
                         "query": request_text,
                         "state_idx": state_idx,
                         "action_idx": action_idx,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -403,7 +402,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
         llm_kwargs: Dict[str, str],
         seed: int,
     ) -> Dataset:
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         # Initialize the inference strategy with the vLLM server URL

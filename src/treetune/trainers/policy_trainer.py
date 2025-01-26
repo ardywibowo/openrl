@@ -3,32 +3,27 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Tuple, List
-from typing import Union
+from typing import List, Optional, Tuple, Union
 
 import deepspeed
 import torch
 from accelerate import Accelerator, PartialState
-from accelerate.utils import GradientAccumulationPlugin, DummyOptim, DummyScheduler
+from accelerate.utils import (DummyOptim, DummyScheduler,
+                              GradientAccumulationPlugin)
 from datasets import Dataset
 from peft import PeftModel
 from torch import nn
-from transformers import (
-    AutoModelForCausalLM,
-    get_scheduler,
-    DataCollator,
-)
+from transformers import AutoModelForCausalLM, DataCollator
 from transformers import Trainer as HfTrainer
+from transformers import get_scheduler
 from transformers.pytorch_utils import ALL_LAYERNORM_LAYERS
 from transformers.trainer_pt_utils import get_parameter_names
 from transformers.trainer_utils import TrainerMemoryTracker, set_seed
 from wandb.sdk.wandb_run import Run as WandbRun
 
 from treetune.common import JsonDict
-from treetune.common.py_utils import (
-    is_flash_attention_model,
-)
-from treetune.logging_utils import get_logger
+from treetune.common.logging_utils import get_logger
+from treetune.common.py_utils import is_flash_attention_model
 from treetune.models.base_model import Model
 from treetune.trainers.arguments import TrainingArguments
 from treetune.trainers.base_trainer import Trainer
@@ -77,27 +72,24 @@ class PolicyTrainer(Trainer):
         training_args: JsonDict,
         model: Model,
         num_episodes_per_iteration: int,
-        distributed_state: PartialState,
-        experiment_root: Path,
         num_iterations: int = 1,
         num_epochs_per_iteration: int = 1,
         init_model_only: bool = False,
         data_collator: Optional[DataCollator] = None,
         deepspeed_config: Optional[JsonDict] = None,
-        cloud_logger: Optional[WandbRun] = None,
+        **kwargs,
     ):
-        self.distributed_state = distributed_state
+        super().__init__(**kwargs)
+        
         self.args = TrainingArguments(**training_args)
         set_seed(self.args.seed)
 
         if isinstance(model, PeftModel):
             assert (
-                distributed_state.num_processes == 1 and deepspeed_config is None
+                self.distributed_state.num_processes == 1 and deepspeed_config is None
             ), "If PEFT just train on a single GPU with no deepspeed"
 
         self.state = TrainerState()
-
-        self.cloud_logger = cloud_logger
 
         self.num_iterations = num_iterations
         self.num_epochs_per_iteration = num_epochs_per_iteration
@@ -105,8 +97,7 @@ class PolicyTrainer(Trainer):
         self.data_collator = data_collator
         self.init_model_only = init_model_only
 
-        self.experiment_root = experiment_root
-        self.checkpoints_dir = self.experiment_root / "checkpoints"
+        self.checkpoints_dir = self.root_dir / "checkpoints"
         self.checkpoints_dir.mkdir(exist_ok=True, parents=True)
         checkpoint_format = self.get_checkpoint_format()
         assert checkpoint_format.startswith("ckpt--iter_")
@@ -130,8 +121,9 @@ class PolicyTrainer(Trainer):
 
         self.deepspeed_plugin = None
         if deepspeed_config is not None:
-            self.args.world_size = distributed_state.num_processes
-            from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+            self.args.world_size = self.distributed_state.num_processes
+            from transformers.integrations.deepspeed import \
+                HfTrainerDeepSpeedConfig
 
             self.hf_deepspeed_config = HfTrainerDeepSpeedConfig(deepspeed_config)
             self.hf_deepspeed_config.trainer_config_process(self.args)
@@ -314,6 +306,9 @@ class PolicyTrainer(Trainer):
                 # For LoRA model we also use 'save_pretrained', which only saves the lora weights
                 # During evaluation, we compute full model weights.
                 model.save_pretrained(hf_checkpoint_path, safe_serialization=False)
+            
+            if self.is_main_process():
+                self.tokenizer.save_pretrained(hf_checkpoint_path)
 
         self.accelerator.save_state(
             str(checkpoint_path)
@@ -436,13 +431,15 @@ class PolicyTrainer(Trainer):
         )
 
         if self.is_deepspeed_enabled:
-            from deepspeed.utils import logger as ds_logger
             import logging
+
+            from deepspeed.utils import logger as ds_logger
 
             ds_logger.setLevel(logging.DEBUG)
 
             if getattr(self.args, "hf_deepspeed_config", None) is None:
-                from transformers.integrations.deepspeed import HfTrainerDeepSpeedConfig
+                from transformers.integrations.deepspeed import \
+                    HfTrainerDeepSpeedConfig
 
                 ds_plugin = self.accelerator.state.deepspeed_plugin
 

@@ -2,7 +2,7 @@ import copy
 import json
 import random
 from random import shuffle
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from accelerate import PartialState
@@ -10,17 +10,18 @@ from datasets import Dataset
 from tqdm import tqdm
 from wandb.apis.public import Run
 
-from treetune import logging_utils
-from treetune.common import Lazy
+from treetune.common import Lazy, logging_utils
 from treetune.episode_generators import EpisodeGenerator
-from treetune.episode_generators.base_episode_generator import EpisodeGeneratorStrategy
-from treetune.episodes import Episode
+from treetune.episode_generators.base_episode_generator import \
+    EpisodeGeneratorStrategy
 from treetune.episode_generators.path_aggregators import PathAggregator
-from treetune.episode_generators.path_filters import PathFilter, SuccessfulPathFilter
+from treetune.episode_generators.path_filters import (PathFilter,
+                                                      SuccessfulPathFilter)
 from treetune.episode_generators.path_post_processors import PathPostProcessor
+from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
 from treetune.tasks import Task
-from treetune.tokenization_utils import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
@@ -159,12 +160,9 @@ class TreeEpisodeUtils:
 class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
     def __init__(
         self,
-        tokenizer: Tokenizer,
-        distributed_state: PartialState,
         inference_strategy: Lazy[InferenceStrategy],
         task: Task,
         episode_strategy: EpisodeGeneratorStrategy,
-        num_episodes_per_iteration: int,
         # During tree generation, we early stop expanding a node if the model reaches the final answer.
         # Thus, in order to make sure such early stopped nodes have equal weight as a node that its children
         # are all expanded, we repeat them branch_factor ^ (max_depth - curr_depth) times.
@@ -172,8 +170,7 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         branch_factor: Optional[int] = None,
         max_depth: Optional[int] = None,
         include_importance_weights: bool = False,
-        cloud_logger: Optional[Run] = None,
-        debug: bool = False,
+        **kwargs
     ):
         self.inference_strategy = inference_strategy.construct(result_dir=None)
         self.task = task
@@ -191,17 +188,11 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
 
         self.episode_cache = []
 
-        super().__init__(
-            tokenizer,
-            distributed_state,
-            num_episodes_per_iteration=num_episodes_per_iteration,
-            cloud_logger=cloud_logger,
-        )
+        super().__init__(**kwargs)
 
-        self.debug = debug
-        if debug:
+        if self.debug_mode:
             self.num_episodes_per_iteration = 10
-        self.can_precompute_episodes = not debug
+        self.can_precompute_episodes = not self.debug_mode
 
     def precompute_episodes(self):
         assert (
@@ -211,14 +202,14 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         results: Dataset = self.inference_strategy.generate(None)
         results_lst = results.to_list()
 
-        if self.debug:
+        if self.debug_mode:
             results_lst = random.sample(results_lst, 100)
 
         logger.info("**** Precomputing training episodes from inference results ****")
         logger.info(f"\tNumber of inference results: {len(results_lst)}")
 
-        from multiprocessing import Pool
         from functools import partial
+        from multiprocessing import Pool
 
         with Pool(8) as p:
             results_lst = list(
@@ -253,7 +244,7 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
         # generate until we have enough episodes
         while len(episodes) < self.num_episodes_per_iteration:
             results = self.inference_strategy.generate(None)
-            if self.debug:
+            if self.debug_mode:
                 results = results.shuffle(seed=42).select(range(100))
                 logger.warning("Debug mode: only using 10 inference results")
 
@@ -400,6 +391,8 @@ class TreeEpisodeGenerator(EpisodeGenerator, TreeEpisodeUtils):
                 reward=reward,
                 query_token_ids=query_token_ids,
                 response_token_ids=response_token_ids,
+                query_text=query_text,
+                response_text=response_text,
                 advantages=advantages,
             )
 
@@ -538,6 +531,8 @@ class TreeEpisodeGeneratorForMath(TreeEpisodeGenerator):
                 reward=reward,
                 query_token_ids=query_token_ids,
                 response_token_ids=response_token_ids,
+                query_text=query_text,
+                response_text=response_text,
                 advantages=[1] * len(response_token_ids),
             )
 

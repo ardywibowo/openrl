@@ -45,7 +45,7 @@ local rejected_template = '
 
     trainer+: {
         type: 'reward_modeling',
-        num_epochs_per_iteration: 4,
+        num_epochs_per_iteration: 1,
         training_args+: {
             learning_rate: 1e-6,
             weight_decay: 0.00,
@@ -67,5 +67,5 @@ local rejected_template = '
     use_deepspeed: true,
 
     num_episodes_per_iteration: null,
-    num_iterations: 1,
+    num_iterations: 2,
 }

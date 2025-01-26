@@ -1,13 +1,13 @@
 import json
 
-from treetune import logging_utils
-from treetune.common import Lazy
-from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
-from treetune.inference_strategies.tree_inference.branch_factor_strategy import (
-    ListBranchFactor,
-)
+from treetune.common import Lazy, logging_utils
+from treetune.inference_strategies.base_inference_strategy import \
+    InferenceStrategy
+from treetune.inference_strategies.tree_inference.branch_factor_strategy import \
+    ListBranchFactor
 from treetune.inference_strategies.tree_inference.expansion import NodeExpander
-from treetune.inference_strategies.tree_inference_strategy import TreeInferenceStrategy
+from treetune.inference_strategies.tree_inference_strategy import \
+    TreeInferenceStrategy
 
 logger = logging_utils.get_logger(__name__)
 

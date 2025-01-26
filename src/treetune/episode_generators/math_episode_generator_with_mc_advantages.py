@@ -4,7 +4,7 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple, Callable, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from accelerate.utils import release_memory
@@ -12,11 +12,11 @@ from datasets import Dataset, concatenate_datasets
 from tqdm import tqdm
 
 from treetune.common import Lazy
+from treetune.common.logging_utils import get_logger
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
 from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
-from treetune.logging_utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -37,33 +37,28 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
     def _run_inference(
         self,
         dataset_shard: Dataset,
-        vllm_init_fn: Callable[[], Tuple[VLLMServer, Dict[str, Any]]],
-        vllm_cleanup_fn: Callable[[], None],
+        model_name_or_path: str,
         results_root_dir: Path,
-        seed: int,
-        iteration: int,
     ):
         vllm_server_ptr, guidance_llm_kwargs_ptr = [], []
 
-        def get_vllm_server():
-            if len(vllm_server_ptr) == 0:
-                out = vllm_init_fn()
-                vllm_server_ptr.append(out[0])
-                guidance_llm_kwargs_ptr.append(out[1])
+        # def get_vllm_server():
+        #     if len(vllm_server_ptr) == 0:
+        #         out = vllm_init_fn()
+        #         vllm_server_ptr.append(out[0])
+        #         guidance_llm_kwargs_ptr.append(out[1])
 
-            return vllm_server_ptr[0], guidance_llm_kwargs_ptr[0]
+        #     return vllm_server_ptr[0], guidance_llm_kwargs_ptr[0]
 
-        def kill_vllm_server():
-            if len(vllm_server_ptr) > 0:
-                vllm_server_ptr[0].stop_server()
-                vllm_server_ptr.pop()
-                guidance_llm_kwargs_ptr.pop()
+        # def kill_vllm_server():
+        #     if len(vllm_server_ptr) > 0:
+        #         vllm_server_ptr[0].stop_server()
+        #         vllm_server_ptr.pop()
+        #         guidance_llm_kwargs_ptr.pop()
 
         def try_loading_inference_results(results_path: Path) -> Optional[Dataset]:
             logger.info(f"Always generating from scratch")
             return None
-
-        metrics = {}
 
         #####################################################################################
         # Sample Trajectories from the current policy
@@ -71,7 +66,10 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_result_path = results_root_dir / "traj_results_ds"
         traj_infer_results = try_loading_inference_results(traj_result_path)
         if traj_infer_results is None:
-            _, guidance_llm_kwargs = get_vllm_server()
+            guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+                model_name_or_path=model_name_or_path,
+                results_dir=results_root_dir
+            )
 
             t0 = time.time()
             traj_infer_results = self._obtain_inference_results(
@@ -79,11 +77,11 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                 requests_ds=dataset_shard,
                 guidance_llm_kwargs=guidance_llm_kwargs,
                 results_path=traj_result_path,
-                seed=seed,
+                seed=self.get_process_seed(),
             )
-            metrics["timing/episode_generation/traj_inference"] = time.time() - t0
+            self._metrics["timing/episode_generation/traj_inference"] = time.time() - t0
             release_memory()
-        trajectories = self._create_trajectories(traj_infer_results, iteration)
+        trajectories = self._create_trajectories(traj_infer_results)
 
         #####################################################################################
         # Estimate the value of each state in the trajectories using Monte Carlo rollouts
@@ -98,7 +96,10 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         unique_results = try_loading_inference_results(val_est_result_path)
         if unique_results is None:
-            _, guidance_llm_kwargs = get_vllm_server()
+            guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+                model_name_or_path=model_name_or_path,
+                results_dir=results_root_dir
+            )
 
             t0 = time.time()
             self._obtain_inference_results(
@@ -106,9 +107,9 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                 requests_ds=unique_requests,
                 guidance_llm_kwargs=guidance_llm_kwargs,
                 results_path=results_root_dir / "value_estimation_result_ds_temp",
-                seed=seed + 1,
+                seed=self.get_process_seed() + self.distributed_state.num_processes,
             )
-            metrics["timing/episode_generation/value_estimation"] = time.time() - t0
+            self._metrics["timing/episode_generation/value_estimation"] = time.time() - t0
 
             # Merge all results into a single file
             self.distributed_state.wait_for_everyone()
@@ -129,14 +130,8 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
 
             self.distributed_state.wait_for_everyone()
             unique_results = Dataset.load_from_disk(str(val_est_result_path))
-
-        kill_vllm_server()
-        release_memory()
-        vllm_cleanup_fn()
-        release_memory()
-
-        if len(metrics) > 0:
-            self._cloud_log(metrics)
+        
+        self.vllm_server_handler.kill_server()
 
         # Distribute the value estimation results back according to the process index
         process_idx = self.distributed_state.process_index
@@ -150,10 +145,10 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         assert len(unique_results) == len(set(all_reqs_to_unique_key))
 
-        # Create a map from unique _treetune__idx to the result index
+        # Create a map from unique __uuid__ to the result index
         # noinspection PyTypeChecker
         unique_key_to_result_idx = {
-            (res["_treetune__idx"], res["process_idx"]): idx
+            (res["__uuid__"], res["process_idx"]): idx
             for idx, res in enumerate(unique_results)
         }
         assert len(unique_key_to_result_idx) == len(unique_results)
@@ -168,7 +163,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                 {
                     k: v
                     for k, v in result.items()
-                    if k.startswith("_treetune__") and k != "_treetune__idx"
+                    if k.startswith("_treetune__")
                 }
             )
             all_results.append(req)
@@ -184,7 +179,6 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             value_estimation_results=Dataset.load_from_disk(
                 str(results_root_dir / "value_estimation_results_ds")
             ),
-            iteration=iteration,
             results_root_dir=results_root_dir,
         )
 
@@ -195,15 +189,13 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_infer_results: Dataset,
         trajectories: List[Dict[str, Any]],
         value_estimation_results: Dataset,
-        iteration: int,
         results_root_dir: Optional[Path] = None,
     ) -> List[Episode]:
         # Update episodes with the value estimates
         trajectories = self._update_trajectories_w_values(
             traj_infer_results=traj_infer_results,
             trajectories=trajectories,
-            value_estimation_results=value_estimation_results,
-            iteration=iteration,
+            value_estimation_results=value_estimation_results
         )
 
         metrics = {
@@ -244,9 +236,8 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             metrics["mc_values/dist"] = values
             metrics["mc_values/mean"] = np.mean(values)
 
-        if len(metrics) > 0:
-            logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
-            self._cloud_log({**logs, "train/global_iteration": iteration})
+        logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
+        self._metrics.update(logs)
 
         return episodes
 
@@ -255,7 +246,6 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_infer_results: Dataset,
         trajectories: List[Dict[str, Any]],
         value_estimation_results: Dataset,
-        iteration: int,
     ) -> List[Dict[str, Any]]:
         metrics = {
             "mc_roll_trunc_frac": [],
@@ -320,9 +310,9 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             for k, values in metrics.items()
             if len(values) > 0
         }
-        if len(metrics) > 0:
-            logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
-            self._cloud_log({**logs, "train/global_iteration": iteration})
+        
+        logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
+        self._metrics.update(logs)
 
         return trajectories
 
@@ -448,8 +438,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
 
     def _create_trajectories(
         self,
-        inference_results: Dataset,
-        iteration: int,
+        inference_results: Dataset
     ) -> List[Dict[str, Any]]:
         metrics = {
             "parse_failed": [],
@@ -591,9 +580,9 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             for k, values in metrics.items()
             if len(values) > 0
         }
-        if len(metrics) > 0:
-            logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
-            self._cloud_log({**logs, "train/global_iteration": iteration})
+        
+        logs = {f"episodes_metric/{k}": v for k, v in metrics.items()}
+        self._metrics.update(logs)
 
         return trajectories
 
@@ -683,7 +672,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                     "data_instance": traj["data_instance"],
                     "traj_idx": traj_idx,
                     "value_idx": 0,
-                    "_treetune__idx": f"{process_idx}__{request_idx}",
+                    "__uuid__": f"{process_idx}__{request_idx}",
                 }
             )
 
@@ -709,14 +698,14 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                         "data_instance": traj["data_instance"],
                         "traj_idx": traj_idx,
                         "value_idx": step_idx + 1,
-                        "_treetune__idx": f"{process_idx}__{request_idx}",
+                        "__uuid__": f"{process_idx}__{request_idx}",
                     }
                 )
 
                 request_idx += 1
 
         # Make sure the there's no duplicate request ids
-        assert len(all_requests) == len(set(r["_treetune__idx"] for r in all_requests))
+        assert len(all_requests) == len(set(r["__uuid__"] for r in all_requests))
 
         # Now Deduplicate the requests based on the query
         unique_queries = {}
@@ -725,7 +714,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         for idx, req in enumerate(all_requests):
             if req["query"] not in unique_queries:
                 unique_queries[req["query"]] = (
-                    req["_treetune__idx"],
+                    req["__uuid__"],
                     req["process_idx"],
                 )
                 unique_requests.append(req)
@@ -795,7 +784,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         seed: int,
     ) -> Dataset:
         # Sanity check
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         # Initialize the inference strategy with the vLLM server URL

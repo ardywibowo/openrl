@@ -1,21 +1,18 @@
 import time
-from typing import Dict, Union, Any, Mapping, Tuple, List
+from typing import Any, Dict, List, Mapping, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-
 from datasets import Dataset
 from torch.utils.data import DataLoader, RandomSampler
 from tqdm import tqdm
 from transformers import PreTrainedModel
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.trainer_pt_utils import get_model_param_count
-from transformers.trainer_utils import (
-    seed_worker,
-    speed_metrics,
-)  # todo: what is seed worker?
+from transformers.trainer_utils import (  # todo: what is seed worker?
+    seed_worker, speed_metrics)
 
-from treetune.logging_utils import get_logger
+from treetune.common.logging_utils import get_logger
 from treetune.trainers import Trainer
 from treetune.trainers.mle_trainer import MaximumLikelihoodTrainer
 from treetune.trainers.policy_trainer import PolicyTrainer
@@ -161,7 +158,7 @@ class BinaryClassificationTrainer(MaximumLikelihoodTrainer):
                 attention_mask[:, 0] == 1
             ), "Flash attention models do not support left padding"
             outputs = model(input_ids=input_ids)
-        logits = outputs['value']  # Shape: (batch_size, max_seq_len, vocab_size)
+        logits = outputs['value']  # Shape: (batch_size, max_seq_len)
         orig_dtype = logits.dtype
         
         # Last indexes is the sum of the attention mask
@@ -171,7 +168,7 @@ class BinaryClassificationTrainer(MaximumLikelihoodTrainer):
         logits = logits.to(torch.float32)
 
         # Extract the last logits according to the last indexes
-        last_logits = logits[range(logits.size(0)), last_indexes.long(), :]
+        last_logits = logits[range(logits.size(0)), last_indexes.long()]
 
         # Flatten the tokens
         last_logits = last_logits.view(-1)

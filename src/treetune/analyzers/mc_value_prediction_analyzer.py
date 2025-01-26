@@ -5,14 +5,15 @@ import pickle
 import random
 import tempfile
 from pathlib import Path
-from typing import List, Tuple, Dict, Any
+from typing import Any, Dict, List, Tuple
 
 from datasets import Dataset, load_from_disk
 from tqdm import tqdm
 
-from treetune import logging_utils
 from treetune.analyzers.analyzer import Analyzer
-from treetune.analyzers.valnet_prediction_analyzer import ValNetPredictionAnalyzer
+from treetune.analyzers.valnet_prediction_analyzer import \
+    ValNetPredictionAnalyzer
+from treetune.common import logging_utils
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.wandb_utils import save_inference_result_to_cloud
 from treetune.trainers.policy_trainer import PolicyTrainer
@@ -243,7 +244,7 @@ class MCValuePredictionAnalyzer(ValNetPredictionAnalyzer):
                     "is_query": True,
                     "predicted_value": pred_values[0],
                     "is_complete_response": not traj["is_unfinished_response"],
-                    "_treetune__idx": request_idx,
+                    "__uuid__": request_idx,
                 }
             )
 
@@ -271,14 +272,14 @@ class MCValuePredictionAnalyzer(ValNetPredictionAnalyzer):
                         "is_query": False,
                         "predicted_value": pred_values[step_idx + 1],
                         "is_complete_response": not traj["is_unfinished_response"],
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
                 request_idx += 1
 
         # Make sure the there's no duplicate request ids
-        assert len(all_requests) == len(set(r["_treetune__idx"] for r in all_requests))
+        assert len(all_requests) == len(set(r["__uuid__"] for r in all_requests))
 
         return all_requests
 

@@ -1,15 +1,18 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from transformers import AutoTokenizer, PreTrainedTokenizerFast
+from transformers import (AutoTokenizer, PreTrainedTokenizerBase,
+                          PreTrainedTokenizerFast)
 
-from treetune.common import JsonDict
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from .registrable import Registrable
 
+
+class Tokenizer(PreTrainedTokenizerBase, Registrable):
+    pass
 
 class DIPreTrainedTokenizer(Tokenizer):
     @classmethod
     def from_di(
-        cls, hf_model_name: str, pretrained_args: Optional[JsonDict] = None, **kwargs
+        cls, hf_model_name: str, pretrained_args: Optional[Dict[str, Any]] = None, **kwargs
     ) -> PreTrainedTokenizerFast:
         if pretrained_args is None:
             pretrained_args = {}

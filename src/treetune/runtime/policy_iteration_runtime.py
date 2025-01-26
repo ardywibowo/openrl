@@ -9,7 +9,7 @@ import subprocess
 import time
 import weakref
 from pathlib import Path
-from typing import Optional, List, Any, Union
+from typing import Any, List, Optional, Union
 
 import torch
 from accelerate import DistributedType
@@ -18,16 +18,16 @@ from datasets import Dataset
 from transformers import AutoConfig
 
 from treetune.analyzers import Analyzer
-from treetune.common import Lazy, JsonDict, Params
+from treetune.common import JsonDict, Lazy, Params
+from treetune.common.logging_utils import get_logger
 from treetune.common.notebook_utils import get_repo_dir
 from treetune.common.py_utils import need_to_minimize_stored_files
 from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
-from treetune.inference_pipelines.base_inference_pipeline import InferencePipeline
-from treetune.logging_utils import get_logger
 from treetune.models.base_model import Model
+from treetune.pipelines.base_inference_pipeline import InferencePipeline
 from treetune.runtime.base_runtime import DistributedRuntime, Runtime
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 from treetune.trainers.base_trainer import Trainer
 from treetune.trainers.deepspeed_policy_trainer import DeepSpeedPolicyTrainer
 from treetune.trainers.policy_trainer import PolicyTrainer
@@ -106,12 +106,12 @@ class PolicyIterationRuntime(DistributedRuntime):
 
     def _init_episode_generator(self):
         self.episode_generator = self.episode_generator.construct(
+            num_episodes_per_iteration=self.num_episodes_per_iteration,
             tokenizer=self.tokenizer,
             distributed_state=self.distributed_state,
-            num_episodes_per_iteration=self.num_episodes_per_iteration,
-            debug=self.debug_mode,
+            debug_mode=self.debug_mode,
             cloud_logger=self.cloud_logger,
-            exp_root=self.exp_root,
+            root_dir=self.exp_root,
             seed=self.global_vars["seed"],
         )
         # Handle the case where we are precomputing episodes from an offline inference result
@@ -136,12 +136,16 @@ class PolicyIterationRuntime(DistributedRuntime):
     def _construct_trainer(self, init_model_only):
         return self.trainer.construct(
             model=self.model,
-            cloud_logger=self.cloud_logger,
-            distributed_state=self.distributed_state,
-            experiment_root=self.exp_root,
             num_iterations=self.num_iterations,
             num_episodes_per_iteration=self.num_episodes_per_iteration,
             init_model_only=init_model_only,
+            
+            tokenizer=self.tokenizer,
+            distributed_state=self.distributed_state,
+            debug_mode=self.debug_mode,
+            cloud_logger=self.cloud_logger,
+            root_dir=self.exp_root,
+            seed=self.global_vars["seed"],
         )
 
     def only_generate_episodes(self):
@@ -229,7 +233,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             assert (
                 iteration + 1 == trainer.state.iteration
             ), f"{iteration+1} != {trainer.state.iteration}"
-
+            
             if (
                 latest_policy_path is not None
                 and self.tokenizer is not None

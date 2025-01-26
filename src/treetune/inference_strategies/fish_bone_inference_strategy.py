@@ -6,7 +6,7 @@ from datasets import Dataset
 
 import guidance
 from guidance.llms import OpenAI, OpenAIVLLM
-from treetune import logging_utils
+from treetune.common import logging_utils
 from treetune.common import guidance_utils as gu, Registrable, Lazy
 from treetune.inference_strategies.base_inference_strategy import InferenceStrategy
 from treetune.inference_strategies.tree_inference import Node
@@ -16,7 +16,7 @@ from treetune.inference_strategies.tree_inference.answer_extraction import (
 from treetune.inference_strategies.tree_inference.expansion import NodeExpander
 from treetune.inference_strategies.tree_inference_strategy import GuidanceLLM
 from treetune.tasks import Task
-from treetune.tokenization_utils.base_tokenizer import Tokenizer
+from treetune.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
 
@@ -107,7 +107,7 @@ class FishBoneInferenceStrategy(InferenceStrategy):
             dataset,
             desc="Creating concurrent asyncio tasks for fish bone construction...",
         ):
-            instance_idx = data_instance["_treetune__idx"]
+            instance_idx = data_instance["__uuid__"]
 
             if not self.no_cache:
                 fish_bone_file_path = self.get_fish_bone_instance_path(instance_idx)
@@ -153,7 +153,7 @@ class FishBoneInferenceStrategy(InferenceStrategy):
                 )
 
         fish_bones = [
-            fish_bones[idx] for idx in dataset["_treetune__idx"]
+            fish_bones[idx] for idx in dataset["__uuid__"]
         ]  # change order back to original
         assert len(fish_bones) == len(
             dataset

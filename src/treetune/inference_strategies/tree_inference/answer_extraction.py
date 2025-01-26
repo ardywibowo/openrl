@@ -1,8 +1,8 @@
 from typing import Optional
 
-from treetune import logging_utils
-from treetune.common import Registrable, JsonDict
+from treetune.common import JsonDict, Registrable
 from treetune.common import guidance_utils as gu
+from treetune.common import logging_utils
 from treetune.common.py_utils import format_string
 from treetune.inference_strategies.tree_inference import Node
 
