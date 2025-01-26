@@ -244,7 +244,7 @@ class MCValuePredictionAnalyzer(ValNetPredictionAnalyzer):
                     "is_query": True,
                     "predicted_value": pred_values[0],
                     "is_complete_response": not traj["is_unfinished_response"],
-                    "_treetune__idx": request_idx,
+                    "__uuid__": request_idx,
                 }
             )
 
@@ -272,14 +272,14 @@ class MCValuePredictionAnalyzer(ValNetPredictionAnalyzer):
                         "is_query": False,
                         "predicted_value": pred_values[step_idx + 1],
                         "is_complete_response": not traj["is_unfinished_response"],
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
                 request_idx += 1
 
         # Make sure the there's no duplicate request ids
-        assert len(all_requests) == len(set(r["_treetune__idx"] for r in all_requests))
+        assert len(all_requests) == len(set(r["__uuid__"] for r in all_requests))
 
         return all_requests
 

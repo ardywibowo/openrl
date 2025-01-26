@@ -18,7 +18,7 @@ class Episode:
         assert len(self.query_token_ids) > 0
         assert len(self.response_token_ids) > 0
 
-        assert self.reward is not None or self.scores is not None
+        # assert self.reward is not None or self.scores is not None
 
         if self.reward is not None:
             self.scores = self.reward

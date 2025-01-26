@@ -21,7 +21,6 @@ class RewardBench(Task):
             map_fn,
             num_proc=4,
             batched=True, 
-            remove_columns=train_dataset.column_names,
             desc="Preprocessing examples"
         )
         

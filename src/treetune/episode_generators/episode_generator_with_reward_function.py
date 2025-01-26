@@ -44,7 +44,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             episodes_without_rewards.extend(episodes)
         
         episodes = self.reward_function.batch_compute_rewards(
-            episodes_without_rewards, iteration)
+            episodes_without_rewards)
 
         return episodes
 
@@ -52,7 +52,11 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
         tree = json.loads(instance["_treetune__reasoning_tree"])
         paths = self.extract_paths_from_tree(tree)
         
-        return [self._convert_path_to_episode(instance, path) for path in paths]
+        episodes = []
+        for path in paths:
+            episodes.extend(self._convert_path_to_episode(instance, path))
+        
+        return episodes
 
     def _convert_path_to_episode(
         self, instance: Dict[str, Any], path: Dict[str, Any]
@@ -72,7 +76,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             )
         except Exception as e:
             logger.error(
-                f"Failed to tokenize query and response for instance {instance['_treetune__idx']}"
+                f"Failed to tokenize query and response for instance {instance['__uuid__']}"
             )
             logger.error(f"Query: {query_text}")
             logger.error(f"Response: {response_text}")
@@ -85,7 +89,7 @@ class EpisodeGeneratorWithRewardFunction(OnPolicyEpisodeGenerator, TreeEpisodeUt
             response_text=response_text,
             scores=None,
         )
-        return episode
+        return [episode]
 
     def _tokenize_query_and_response(
         self, query: str, response: str, allow_append_eos: bool = True

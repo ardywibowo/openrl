@@ -203,7 +203,7 @@ class LinguisticCalibration(Task):
             output = {}
             if prepend_in_context_few_shot:
                 # Generate a seed based on the example's index for reproducibility.
-                init_seed = example["_treetune__idx"]
+                init_seed = example["__uuid__"]
 
                 num_tries = 0
                 while num_tries < max_retries:

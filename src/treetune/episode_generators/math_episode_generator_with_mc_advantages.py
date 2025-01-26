@@ -145,10 +145,10 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         assert len(unique_results) == len(set(all_reqs_to_unique_key))
 
-        # Create a map from unique _treetune__idx to the result index
+        # Create a map from unique __uuid__ to the result index
         # noinspection PyTypeChecker
         unique_key_to_result_idx = {
-            (res["_treetune__idx"], res["process_idx"]): idx
+            (res["__uuid__"], res["process_idx"]): idx
             for idx, res in enumerate(unique_results)
         }
         assert len(unique_key_to_result_idx) == len(unique_results)
@@ -163,7 +163,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                 {
                     k: v
                     for k, v in result.items()
-                    if k.startswith("_treetune__") and k != "_treetune__idx"
+                    if k.startswith("_treetune__")
                 }
             )
             all_results.append(req)
@@ -672,7 +672,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                     "data_instance": traj["data_instance"],
                     "traj_idx": traj_idx,
                     "value_idx": 0,
-                    "_treetune__idx": f"{process_idx}__{request_idx}",
+                    "__uuid__": f"{process_idx}__{request_idx}",
                 }
             )
 
@@ -698,14 +698,14 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
                         "data_instance": traj["data_instance"],
                         "traj_idx": traj_idx,
                         "value_idx": step_idx + 1,
-                        "_treetune__idx": f"{process_idx}__{request_idx}",
+                        "__uuid__": f"{process_idx}__{request_idx}",
                     }
                 )
 
                 request_idx += 1
 
         # Make sure the there's no duplicate request ids
-        assert len(all_requests) == len(set(r["_treetune__idx"] for r in all_requests))
+        assert len(all_requests) == len(set(r["__uuid__"] for r in all_requests))
 
         # Now Deduplicate the requests based on the query
         unique_queries = {}
@@ -714,7 +714,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         for idx, req in enumerate(all_requests):
             if req["query"] not in unique_queries:
                 unique_queries[req["query"]] = (
-                    req["_treetune__idx"],
+                    req["__uuid__"],
                     req["process_idx"],
                 )
                 unique_requests.append(req)
@@ -784,7 +784,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         seed: int,
     ) -> Dataset:
         # Sanity check
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         # Initialize the inference strategy with the vLLM server URL

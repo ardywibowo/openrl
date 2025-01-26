@@ -107,7 +107,7 @@ class FishBoneInferenceStrategy(InferenceStrategy):
             dataset,
             desc="Creating concurrent asyncio tasks for fish bone construction...",
         ):
-            instance_idx = data_instance["_treetune__idx"]
+            instance_idx = data_instance["__uuid__"]
 
             if not self.no_cache:
                 fish_bone_file_path = self.get_fish_bone_instance_path(instance_idx)
@@ -153,7 +153,7 @@ class FishBoneInferenceStrategy(InferenceStrategy):
                 )
 
         fish_bones = [
-            fish_bones[idx] for idx in dataset["_treetune__idx"]
+            fish_bones[idx] for idx in dataset["__uuid__"]
         ]  # change order back to original
         assert len(fish_bones) == len(
             dataset

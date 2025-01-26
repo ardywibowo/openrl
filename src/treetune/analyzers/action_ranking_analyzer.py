@@ -284,7 +284,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
                         "total_steps": len(step_end_indices),
                         "is_complete_response": is_complete_response,
                         "step_end_indices": step_end_indices,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -386,7 +386,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
                         "query": request_text,
                         "state_idx": state_idx,
                         "action_idx": action_idx,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -402,7 +402,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
         llm_kwargs: Dict[str, str],
         seed: int,
     ) -> Dataset:
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         # Initialize the inference strategy with the vLLM server URL

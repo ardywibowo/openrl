@@ -96,7 +96,7 @@ class Task(Registrable):
 
         # Add idx column
         data_source = data_source.map(
-            lambda example, idx: {"_treetune__idx": idx},
+            lambda example, idx: {"__uuid__": idx},
             with_indices=True,
             num_proc=self.hf_num_proc,
             desc="Adding idx column",

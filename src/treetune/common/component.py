@@ -18,7 +18,8 @@ class Component(Registrable):
         cloud_logger: Optional[Run] = None,
         root_dir: Optional[Path] = None,
         tokenizer: Optional[Tokenizer] = None,
-        debug_mode: Optional[bool] = False
+        debug_mode: Optional[bool] = False,
+        **kwargs
     ):
         super().__setattr__('_components', {})  # Initialize the component registry
         
@@ -35,7 +36,9 @@ class Component(Registrable):
         self._metrics = {}
         self._root_dir = self.root_dir / f"iteration__{self._iteration:04d}"
         
-        self._log_on_main(logger, self)
+        if kwargs:
+            self._log_on_main(logger, f"Unused arguments: {kwargs}")
+        
 
     def get_process_seed(self) -> int:
         return self.seed + self._iteration * self.distributed_state.num_processes + self.distributed_state.process_index

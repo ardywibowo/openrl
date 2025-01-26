@@ -98,7 +98,7 @@ class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to tokenize query and response for instance {instance['_treetune__idx']}: {e}"
+                        f"Failed to tokenize query and response for instance {instance['__uuid__']}: {e}"
                     )
                     logger.error(f"Query: {query_text}")
                     logger.error(f"Response: {response_text}")
@@ -124,7 +124,7 @@ class MathEpisodeGenerator(EpisodeGeneratorWithRewardFunction):
 
                 if len(response_token_ids) == 0:
                     logger.warning(
-                        f"Response token ids are empty for instance {instance['_treetune__idx']}"
+                        f"Response token ids are empty for instance {instance['__uuid__']}"
                     )
                     metrics.setdefault("empty_response", []).append(True)
                     continue

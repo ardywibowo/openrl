@@ -314,7 +314,7 @@ class ValNetPredictionAnalyzer(Analyzer):
         results_path: Path,
         seed: int,
     ) -> Dataset:
-        request_ids = requests_ds["_treetune__idx"]
+        request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
         vllm_server = self.vllm_server_lazy.construct(seed=42)
@@ -402,7 +402,7 @@ class ValNetPredictionAnalyzer(Analyzer):
                         "is_last_step": False,
                         "total_steps": len(step_end_indices),
                         "is_complete_response": is_complete_response,
-                        "_treetune__idx": request_idx,
+                        "__uuid__": request_idx,
                     }
                 )
 
@@ -437,7 +437,7 @@ class ValNetPredictionAnalyzer(Analyzer):
                         "is_complete_response": True,
                         "gt_value": ep["scores"],
                         "episode_idx": ep_idx,
-                        "_treetune__idx": ep_idx,
+                        "__uuid__": ep_idx,
                     }
                 )
 

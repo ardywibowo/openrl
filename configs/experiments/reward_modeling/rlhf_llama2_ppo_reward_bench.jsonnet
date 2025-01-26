@@ -5,10 +5,7 @@ local actor_tokenizer = {
     hf_model_name: hf_model_name,
 };
 
-local math_task = (import 'tasks/reward_modeling/reward_bench.jsonnet') + {
-    prepend_in_context_few_shot: false,
-    ensure_fit_in_context_size: false,
-};
+local task = (import 'tasks/reward_modeling/reward_bench.jsonnet');
 
 local num_episodes_per_iteration = 512;
 local num_rollouts_per_sample = 8;
@@ -20,23 +17,19 @@ local sampling_temperature = 0.6;
 (import 'gvar.jsonnet')
 + (import 'prompt_library/reward_bench_step_by_step_sft.jsonnet')
 + (import 'runtimes/policy_iteration.jsonnet')
-+ (import 'episode_generators/math_episode_generator.jsonnet')
-+ (import 'trainers/ppo_MATH.jsonnet')
++ (import 'episode_generators/reward_bench_llama2_reward_model_episode_generator.jsonnet')
++ (import 'trainers/ppo_reward_bench.jsonnet')
 + {
     episode_generator+: {
         // Override the task
-        task: math_task,
-        reward_function+: { math_task: $.episode_generator.task },
+        task: task,
         reasoning_step_delimiter: '',
-        answer_prefix: null,
 
         initial_model_name_or_path: hf_model_name,
 
         dataset_sample_with_replacement: true,
         dataset_num_samples_per_iteration: num_dataset_samples_per_iteration,
         total_num_iterations: $.num_iterations,
-
-        max_sequence_length: 2499,  // Increase the max_seq_len since the model context size is 4096
 
         save_generations_every_n_iteration: 50,
 
@@ -56,7 +49,6 @@ local sampling_temperature = 0.6;
                     temperature: sampling_temperature,
                     top_p: 0.9,
                     max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
                 },
                 node_text_template: '{chain_of_thought}',
 
@@ -158,7 +150,7 @@ local sampling_temperature = 0.6;
         },
     ],
 }
-+ (import 'sft_deepseekmath_for_MATH_eval.jsonnet')
 + (import 'trainers/lam1.jsonnet')
 + (import 'trainers/refKl0.0001.jsonnet')
 + (import 'trainers/klLoss.jsonnet')
+// + (import 'sft_deepseekmath_for_MATH_eval.jsonnet')

@@ -1,4 +1,4 @@
-local hf_model_name = "experiments/reward_modeling_llama2_20250123_133530/checkpoints/ckpt--iter_0001--epoch_2.00--step_0048/hf_pretrained/";
+local hf_model_name = "experiments/reward_modeling_llama2_20250123_210003/checkpoints/ckpt--iter_0002--epoch_1.00--step_0047/hf_pretrained/";
 
 local reward_bench_task = (import '../tasks/reward_bench.jsonnet');
 

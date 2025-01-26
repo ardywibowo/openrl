@@ -286,7 +286,7 @@ class KLWithReferenceAnalyzer(Analyzer):
 
             tree = json.loads(instance["_treetune__reasoning_tree"])
 
-            idx = instance["_treetune__idx"]
+            idx = instance["__uuid__"]
             assert idx not in encountered_question_indices, f"Question {idx} is encountered more than once."
             encountered_question_indices.append(idx)
 
@@ -320,7 +320,7 @@ class KLWithReferenceAnalyzer(Analyzer):
                     )
                 except Exception as e:
                     logger.error(
-                        f"Failed to tokenize query and response for instance {instance['_treetune__idx']}: {e}"
+                        f"Failed to tokenize query and response for instance {instance['__uuid__']}: {e}"
                     )
                     logger.error(f"Query: {query_text}")
                     logger.error(f"Response: {response_text}")

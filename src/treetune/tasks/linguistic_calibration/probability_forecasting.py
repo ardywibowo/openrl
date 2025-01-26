@@ -40,7 +40,6 @@ class ProbabilityForecasting(Task):
             map_fn,
             num_proc=4,
             batched=True, 
-            remove_columns=train_ds.column_names,
             desc="Preprocessing examples"
         )
         

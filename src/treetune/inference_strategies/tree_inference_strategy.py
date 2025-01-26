@@ -194,7 +194,7 @@ class TreeInferenceStrategy(InferenceStrategy):
             dataset,
             desc="Creating concurrent asyncio tasks for tree construction...",
         ):
-            instance_idx = data_instance["_treetune__idx"]
+            instance_idx = data_instance["__uuid__"]
 
             if not self.no_cache:
                 tree_file_path = self.get_tree_instance_path(instance_idx)
@@ -250,7 +250,7 @@ class TreeInferenceStrategy(InferenceStrategy):
                 )
 
         trees = [
-            trees[idx] for idx in dataset["_treetune__idx"]
+            trees[idx] for idx in dataset["__uuid__"]
         ]  # change order back to original
         assert len(trees) == len(
             dataset
