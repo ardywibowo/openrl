@@ -242,5 +242,7 @@ class ModelBasedRewardFunction(RewardFunction):
 
         if self.cache_reward_model_on_cpu:
             reward_model.to("cpu")
+        
+        logger.info(f"HELLO Rewards: {all_rewards}")
 
         return all_rewards

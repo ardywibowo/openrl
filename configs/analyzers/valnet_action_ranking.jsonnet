@@ -70,7 +70,7 @@ local num_alternative_actions = 5;
     append_bos_to_query: true,
 
     vllm_server+: {
-        swap_space: 32,
+        swap_space: 8,
         enable_prefix_caching: true,
     },
 }

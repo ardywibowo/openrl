@@ -36,7 +36,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         inference_strategy: Lazy[InferenceStrategy],
         vllm_server_handler: Lazy[VLLMServerHandler],
         task: Task,
-        seed: int,
         initial_model_name_or_path: str,
         dataset_shuffle_on_each_iteration: bool = True,
         dataset_shuffle_before_portion: bool = True,
@@ -64,7 +63,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self.vllm_server_handler = vllm_server_handler.construct(**kwargs)
         self.task = task
         self.dataset_split = dataset_split
-        self.seed = seed
         self.initial_model_name_or_path = initial_model_name_or_path
         self.dataset_portion = dataset_portion
         self.dataset_num_samples_per_iteration = dataset_num_samples_per_iteration
@@ -99,33 +97,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self.temp_dir_root.mkdir(parents=True, exist_ok=True)
 
         self._orig_ds = None
-
-        self._vllm_port = None
-        self._port_generator_rng = random.Random(self.seed)
-        self._set_vllm_ports()
-
-    def _set_vllm_ports(self, seed: Optional[int] = None):
-        """
-        The main process searches for self.distributed_state.num_processes's free ports.
-        and then broadcasts the ports to all processes.
-        """
-        if self.distributed_state.process_index == 0:
-            ports = find_n_free_ports(
-                self.distributed_state.num_processes, generator=self._port_generator_rng
-            )
-            logger.info(f"Found free ports: {ports}")
-        else:
-            ports = [0] * self.distributed_state.num_processes
-
-        from accelerate.utils import broadcast_object_list
-
-        ports = broadcast_object_list(ports, from_process=0)
-        release_memory()
-
-        self._vllm_port = ports[self.distributed_state.process_index]
-        logger.info(
-            f"Rank {self.distributed_state.process_index} using vLLM port {self._vllm_port}"
-        )
 
     def _init_orig_ds(self):
         ds = self.task.get_datasets(self.dataset_split)
@@ -285,22 +256,18 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
             hf_ckpt_path_or_model = str(latest_policy_path)
         
         t0 = time.time()
-        
         infer_results = self._run_inference(
             dataset_shard=dataset,
             model_name_or_path=hf_ckpt_path_or_model,
             results_root_dir=results_dir
         )
-        
         self.distributed_state.wait_for_everyone()
-
         self._metrics["timing/episode_generation/inference"] = time.time() - t0
 
         logger.info(f"Process {process_index} finished inference.")
 
-        t0 = time.time()
-
         # Generate episodes from inference results. Each process generates its own episodes.
+        t0 = time.time()
         episodes_lst = [
             self._convert_to_dict(e)
             for e in self._generate_episodes(infer_results, iteration)
@@ -312,24 +279,6 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         del episodes_ds_shard
         release_memory()
         self._metrics["timing/episode_generation/inferResult_to_episodes"] = time.time() - t0
-
-        # Log the vLLM stats
-        if self.distributed_state.is_main_process:
-            try:
-                vllm_stats = compute_vllm_stats(results_dir / "vllm_server.log")
-            except Exception as e:
-                logger.error(f"Error while computing vLLM stats: {e}")
-                vllm_stats = {}
-
-            if "avg_generation_throughput" in vllm_stats:
-                vllm_stats["total_approx_generation_throughput"] = (
-                    vllm_stats["avg_generation_throughput"]
-                    * self.distributed_state.num_processes
-                )
-
-            vllm_stats = {f"vllm_stats/{k}": round(v, 2) for k, v in vllm_stats.items()}
-            logger.info(f"vLLM Stats: {vllm_stats}")
-            self._metrics.update(vllm_stats)
 
         # Concatenate all episodes shards
         self.distributed_state.wait_for_everyone()
@@ -431,6 +380,8 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         del results
         
         self.vllm_server_handler.kill_server()
+        self.vllm_server_handler.compute_and_log_vllm_stats(results_root_dir)
+        
         results = Dataset.load_from_disk(str(results_root_dir / "results_ds"))
         return results
 

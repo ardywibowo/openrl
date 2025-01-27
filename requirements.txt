@@ -41,3 +41,4 @@ triton
 vllm
 xformers
 cchardet
+python-chess

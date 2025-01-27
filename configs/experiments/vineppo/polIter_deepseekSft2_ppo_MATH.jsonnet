@@ -106,7 +106,7 @@ local sampling_temperature = 0.6;
         (import 'analyzers/valnet_prediction.jsonnet') + {
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
-            vllm_server+: { swap_space: 64 },
+            vllm_server+: { swap_space: 8 },
 
             reward_function: $.episode_generator.reward_function,
 
@@ -133,7 +133,7 @@ local sampling_temperature = 0.6;
         (import 'analyzers/valnet_action_ranking.jsonnet') + {
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
-            vllm_server+: { swap_space: 64 },
+            vllm_server+: { swap_space: 8 },
 
             reward_function: $.episode_generator.reward_function,
 

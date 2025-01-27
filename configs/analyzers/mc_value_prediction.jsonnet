@@ -43,7 +43,7 @@ local guidance_program = '{{prefix}}{{gen "chain_of_thought" temperature={temper
     },
 
     vllm_server+: {
-        swap_space: 32,
+        swap_space: 8,
         enable_prefix_caching: true,
     },
 }

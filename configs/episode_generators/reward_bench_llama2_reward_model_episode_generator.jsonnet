@@ -18,7 +18,7 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         
         vllm_server_handler+: {
             vllm_server+: {
-                swap_space: 16,
+                swap_space: 8,
             },
             gpu_memory_utilization: 'auto',
             min_available_gpu_memory_mb: 20 * 1024,

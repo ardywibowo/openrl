@@ -167,10 +167,10 @@ class VLLMServerHandler(Component):
 
         return _vllm_init_fn, _vllm_cleanup_fn
 
-    def _compute_and_log_vllm_stats(self) -> Dict[str, Any]:
+    def compute_and_log_vllm_stats(self, results_dir: Path) -> Dict[str, Any]:
         if self.distributed_state.is_main_process:
             try:
-                log_path = self.root_dir / "vllm_server.log"
+                log_path = results_dir / "vllm_server.log"
                 vllm_stats = compute_vllm_stats(log_path)
             except Exception as e:
                 logger.error(f"Error while computing vLLM stats: {e}")
