@@ -4,8 +4,8 @@ from typing import Any, Dict, List, Optional
 
 from datasets import Dataset
 
-import guidance
-from guidance.llms import OpenAI, OpenAIVLLM
+import guidance_legacy
+from guidance_legacy.llms import OpenAI, OpenAIVLLM
 from treetune.common import Lazy, Registrable
 from treetune.common import guidance_utils as gu
 from treetune.common import logging_utils
@@ -157,7 +157,7 @@ class TreeInferenceStrategy(InferenceStrategy):
                     exit(1)
 
         # Set the guidance LLM
-        guidance.llm = self.guidance_llm_lazy.construct()
+        guidance_legacy.llm = self.guidance_llm_lazy.construct()
 
         self.node_expander.set_run_program(sem_run_program)
         self.answer_extractor.set_run_program(sem_run_program)

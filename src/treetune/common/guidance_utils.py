@@ -1,8 +1,8 @@
-import guidance
+import guidance_legacy
 
 
 async def run_program(guidance_template, **kwargs):
-    program = guidance(
+    program = guidance_legacy(
         guidance_template,
         silent=True,
         logging=True,

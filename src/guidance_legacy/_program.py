@@ -15,7 +15,7 @@ import nest_asyncio
 from . import _utils
 from ._program_executor import ProgramExecutor
 from . import commands
-import guidance
+import guidance_legacy
 log = logging.getLogger(__name__)
 
 # load the javascript client code
@@ -116,7 +116,7 @@ class Program:
         
         # save the given parameters
         self._text = text
-        self.llm = llm or getattr(guidance, "llm", None)
+        self.llm = llm or getattr(guidance_legacy, "llm", None)
         self.cache_seed = cache_seed
         self.caching = caching
         self.logprobs = logprobs

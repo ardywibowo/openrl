@@ -2,7 +2,7 @@ from typing import Any, Dict
 import asyncio
 import re
 import json
-import guidance
+import guidance_legacy
 
 from .caches import DiskCache
 
@@ -28,7 +28,7 @@ class LLM(metaclass=LLMMeta):
         self.model_name = "unknown"
 
         # these should all start with the @ symbol and are variables programs can use when running with this LLM
-        self.tool_def = guidance("""
+        self.tool_def = guidance_legacy("""
 # Tools
 
 {{#if len(functions) > 0~}}
