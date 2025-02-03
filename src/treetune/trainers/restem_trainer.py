@@ -25,15 +25,14 @@ from transformers.integrations import HfTrainerDeepSpeedConfig
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.trainer_pt_utils import get_model_param_count
 
-from treetune.common import JsonDict, Lazy, Params
+from treetune.common import JsonDict, Lazy, Params, Tokenizer
 from treetune.common.deepspeed_utils import (prepare_data_loader_for_inference,
                                              prepare_data_loader_for_training)
 from treetune.common.logging_utils import get_logger
-from treetune.common.vllm_server import VLLMServer
 from treetune.common.wandb_utils import get_repo_dir
+from treetune.inference_servers import InferenceServer
 from treetune.models.base_model import Model
 from treetune.pipelines import InferencePipeline
-from treetune.common import Tokenizer
 from treetune.trainers.arguments import TrainingArguments
 from treetune.trainers.base_trainer import Trainer
 from treetune.trainers.data_collator import (COLUMN_ACTOR_SHIFTED_LOGPS,
@@ -66,7 +65,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
         cache_deepspeed_engines: bool = False,
         move_reference_model_to_cpu: bool = False,
         kl_penalty_loss_type: Optional[Literal["kl", "abs", "mse", "control_variate"]] = None,
-        early_stop_vllm_server: Lazy[VLLMServer] = None,  # we need this to choose the best checkpoint in each iteration
+        early_stop_inference_server: Lazy[InferenceServer] = None,  # we need this to choose the best checkpoint in each iteration
         early_stop_inference_pipeline_cfg: JsonDict = None,
         early_stop_tokenizer: Tokenizer = None,
         early_stop_method: Literal['restem_paper_original', 'choose_best'] = 'restem_paper_original',
@@ -117,7 +116,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
         self.profile_torch_memory = profile_torch_memory
         self.cache_deepspeed_engines = cache_deepspeed_engines
         self.move_reference_model_to_cpu = move_reference_model_to_cpu
-        self.early_stop_vllm_server = early_stop_vllm_server
+        self.early_stop_inference_server = early_stop_inference_server
         self.early_stop_inference_pipeline_cfg = early_stop_inference_pipeline_cfg
         self.early_stop_tokenizer = early_stop_tokenizer
         self.early_stop_method = early_stop_method
@@ -344,9 +343,9 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                 es_accuracies = []
                 for ckpt in checkpoints:
                     logger.info("Evaluating checkpoint for RestEM early stopping: %s", ckpt)
-                    vllm_ckpt_dir = ckpt / "hf_pretrained"
-                    assert vllm_ckpt_dir.exists(), f"Checkpoint directory {vllm_ckpt_dir} does not exist."
-                    vllm_server = self.early_stop_vllm_server.construct(
+                    inference_ckpt_dir = ckpt / "hf_pretrained"
+                    assert inference_ckpt_dir.exists(), f"Checkpoint directory {inference_ckpt_dir} does not exist."
+                    inference_server = self.early_stop_inference_server.construct(
                         seed=self.args.seed # todo: figure how to path the checkpoint dir
                     )
 
@@ -356,12 +355,12 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                     logs_dir = eval_dir / "logs"
                     logs_dir.mkdir(parents=True, exist_ok=True)
 
-                    vllm_log_file = logs_dir / f"vllm_eval_{ckpt.name}.log"
-                    vllm_log_file.touch()
+                    inference_log_file = logs_dir / f"inference_eval_{ckpt.name}.log"
+                    inference_log_file.touch()
 
-                    logger.info(f"(EARLY-STOP)Starting VLLM server with log file {vllm_log_file}")
+                    logger.info(f"(EARLY-STOP)Starting inference server with log file {inference_log_file}")
                     # save tokenizer there
-                    self.early_stop_tokenizer.save_pretrained(vllm_ckpt_dir)
+                    self.early_stop_tokenizer.save_pretrained(inference_ckpt_dir)
 
                     # wait for memory release, cause otherwise Cude Out of Memory =(
                     release_memory()
@@ -370,14 +369,12 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                     this_process_device = self.distributed_state.device
                     wait_for_memory_release(target_gpu_index=this_process_device.index, threshold_mb=4096)
 
-                    server_url = vllm_server.start_server(
-                        hf_ckpt_path_or_model=vllm_ckpt_dir,
+                    server_url = inference_server.start_server(
+                        hf_ckpt_path_or_model=inference_ckpt_dir,
                         wait_for_response=True,
-                        log_path=vllm_log_file,
+                        log_path=inference_log_file,
                         timeout=800,
                     )
-
-                    os.environ["APP_OPENAI_VLLM_API_BASE"] = "none"
 
                     # Run the evaluation pipeline for early stopping
                     cfg = self.early_stop_inference_pipeline_cfg.copy()
@@ -390,7 +387,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                         tokenizer=self.early_stop_tokenizer,   # todo: find the tokenizer
                         seed=2746318213,
                         api_base_url=server_url,
-                        model_name=str(vllm_ckpt_dir),
+                        model_name=str(inference_ckpt_dir),
                         metrics_prefix=f"{ckpt.name}/",
                         enable_cloud_logging_during_inference=False,
                         use_cache=True,
@@ -405,7 +402,7 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
 
                     es_accuracies.append(es_accuracy)
 
-                    vllm_server.stop_server()
+                    inference_server.stop_server()
                     logger.info(f"(EARLY-STOP) Accuracy for {ckpt.name}: {es_accuracy:.3f}")
 
                 # in RestEM we early stop based on the validation accuracy

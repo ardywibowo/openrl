@@ -16,7 +16,7 @@ from treetune.common import logging_utils
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy
 from treetune.common.py_utils import need_to_minimize_stored_files
-from treetune.common.vllm_server import VLLMServer
+from treetune.inference_servers import InferenceServer
 from treetune.common.wandb_utils import save_inference_result_to_cloud
 from treetune.reward_functions import RewardFunction
 from treetune.inference_strategies import InferenceStrategy
@@ -34,7 +34,7 @@ class ValNetPredictionAnalyzer(Analyzer):
         task: Task,
         tokenizer: Tokenizer,
         inference_strategy: Lazy[InferenceStrategy],
-        vllm_server: Lazy[VLLMServer],
+        inference_server: Lazy[InferenceServer],
         cloud_logger: Run,
         runtime,
         reward_function: Lazy[RewardFunction],
@@ -56,7 +56,7 @@ class ValNetPredictionAnalyzer(Analyzer):
         self.solution_delimiter = solution_delimiter
         self.max_num_requests = max_num_requests
         self.inference_strategy_lazy = inference_strategy
-        self.vllm_server_lazy = vllm_server
+        self.inference_server_lazy = inference_server
         self.reward_function = reward_function.construct(tokenizer=tokenizer)
         self.problem_field = problem_field
 
@@ -317,16 +317,16 @@ class ValNetPredictionAnalyzer(Analyzer):
         request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
-        vllm_server = self.vllm_server_lazy.construct(seed=42)
+        inference_server = self.inference_server_lazy.construct(seed=42)
         hf_ckpt_path_or_model = checkpoint / "hf_pretrained"
 
-        # Make sure the vLLM server can seamlessly load the model
+        # Make sure the inference server can seamlessly load the model
         self.tokenizer.save_pretrained(hf_ckpt_path_or_model)
 
-        server_url = vllm_server.start_server(
+        server_url = inference_server.start_server(
             hf_ckpt_path_or_model=str(hf_ckpt_path_or_model),
             wait_for_response=True,
-            log_path=results_path.parent / f"{results_path.stem}.vllm_log",
+            log_path=results_path.parent / f"{results_path.stem}.log",
             timeout=800,
         )
         guidance_llm_kwargs = {
@@ -334,7 +334,7 @@ class ValNetPredictionAnalyzer(Analyzer):
             "model": str(hf_ckpt_path_or_model),
         }
 
-        # Initialize the inference strategy with the vLLM server URL
+        # Initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
         # noinspection PyProtectedMember
         inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
@@ -346,7 +346,7 @@ class ValNetPredictionAnalyzer(Analyzer):
 
         results = infer_strategy.generate(requests_ds)
         results.save_to_disk(str(results_path))
-        vllm_server.stop_server()
+        inference_server.stop_server()
 
         return Dataset.load_from_disk(str(results_path))
 

@@ -1,8 +1,9 @@
 {
     episode_generator+: {
-        vllm_server_handler+: {
-            vllm_server+: {
-                swap_space: 20,
+        inference_server_handler+: {
+            inference_server+: {
+                type: "vllm",
+                swap_space: 8,
             },
         },
         dataset_shuffle_on_each_iteration: true,

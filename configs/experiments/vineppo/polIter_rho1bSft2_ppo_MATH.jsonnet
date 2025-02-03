@@ -36,8 +36,12 @@ local sampling_temperature = 0.6;
         dataset_num_samples_per_iteration: num_dataset_samples_per_iteration,
         total_num_iterations: $.num_iterations,
         
-        vllm_server_handler+: {
-            vllm_server+: { swap_space: 8, max_num_seqs: 512 },
+        inference_server_handler+: {
+            inference_server+: { 
+                type: "vllm",
+                swap_space: 8, 
+                max_num_seqs: 512 
+            },
             min_available_gpu_memory_mb: 10 * 1024,
         },
 
@@ -118,7 +122,10 @@ local sampling_temperature = 0.6;
         (import 'analyzers/valnet_prediction.jsonnet') + {
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
-            vllm_server+: { swap_space: 24 },
+            inference_server+: { 
+                type: "vllm",
+                swap_space: 8
+            },
 
             reward_function: $.episode_generator.reward_function,
 
@@ -147,7 +154,10 @@ local sampling_temperature = 0.6;
         (import 'analyzers/valnet_action_ranking.jsonnet') + {
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
-            vllm_server+: { swap_space: 24 },
+            inference_server+: { 
+                type: "vllm",
+                swap_space: 8
+            },
 
             reward_function: $.episode_generator.reward_function,
 

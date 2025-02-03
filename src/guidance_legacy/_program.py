@@ -20,7 +20,7 @@ log = logging.getLogger(__name__)
 
 # load the javascript client code
 file_path = pathlib.Path(__file__).parent.parent.absolute()
-with open(file_path / "guidance" / "resources" / "main.js", encoding="utf-8") as f:
+with open(file_path / "guidance_legacy" / "resources" / "main.js", encoding="utf-8") as f:
     js_data = f.read()
 
 class Log:

@@ -68,8 +68,9 @@ local math_validation_inference_pipeline =
 + (import 'trainers/restem_MATH.jsonnet')
 + {
     episode_generator+: {
-        vllm_server_handler+: {
-            vllm_server+: {
+        inference_server_handler+: {
+            inference_server+: {
+                type: "vllm",
                 swap_space: 8,
             },
         },
@@ -158,7 +159,7 @@ local math_validation_inference_pipeline =
 
         # this is needed for the early stopping based on performance on validation split
         early_stop_tokenizer: $.tokenizer,
-        early_stop_vllm_server: { swap_space: 8},
+        early_stop_inference_server: { swap_space: 8},
         early_stop_inference_pipeline_cfg: math_validation_inference_pipeline  +
         {
             inference_strategy+: {

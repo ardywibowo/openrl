@@ -6,7 +6,6 @@ from .from_params import ConfigurationError, FromParams
 from .lazy import Lazy
 from .params import Params
 from .registrable import Registrable
-from .vllm_server_handler import VLLMServerHandler
 from .tokenizer import Tokenizer, DIPreTrainedTokenizer
 
 assert FromParams
@@ -15,7 +14,6 @@ assert Params
 assert Registrable
 assert ConfigurationError
 assert Component
-assert VLLMServerHandler
 assert Tokenizer
 assert DIPreTrainedTokenizer
 

@@ -7,19 +7,16 @@ import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
-import torch.cuda
 from accelerate.utils import release_memory
 from datasets import Dataset, concatenate_datasets
 
-from treetune.common import Lazy, VLLMServerHandler
-from treetune.common.gpu_utils import get_gpu_memory, wait_for_memory_release
+from treetune.common import Lazy
 from treetune.common.logging_utils import get_logger
-from treetune.common.py_utils import find_n_free_ports
-from treetune.common.vllm_server import VLLMServer, compute_vllm_stats
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.episodes import Episode
+from treetune.inference_servers import InferenceServerHandler
 from treetune.inference_strategies.base_inference_strategy import \
     InferenceStrategy
 from treetune.tasks.base_task import Task
@@ -34,7 +31,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
     def __init__(
         self,
         inference_strategy: Lazy[InferenceStrategy],
-        vllm_server_handler: Lazy[VLLMServerHandler],
+        inference_server_handler: Lazy[InferenceServerHandler],
         task: Task,
         initial_model_name_or_path: str,
         dataset_shuffle_on_each_iteration: bool = True,
@@ -60,7 +57,7 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         self._logger = logger
 
         self.inference_strategy_lazy = inference_strategy
-        self.vllm_server_handler = vllm_server_handler.construct(**kwargs)
+        self.inference_server_handler = inference_server_handler.construct(**kwargs)
         self.task = task
         self.dataset_split = dataset_split
         self.initial_model_name_or_path = initial_model_name_or_path
@@ -343,23 +340,21 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         results_root_dir: Path,
     ):
         """
-        Potentially start a vLLM server and run inference to generate results needed for episode generation.
+        Potentially start an inference server and run inference to generate results needed for episode generation.
 
         Args:
             dataset_shard (Dataset):
                 The shard of the prompt dataset to run inference on.
-            vllm_init_fn (Callable[[], Tuple[VLLMServer, Dict[str, Any]]]):
-                A function that initializes the vLLM server and returns the server object and the server URL.
+            model_name_or_path (str):
+                The model to use for inference.
             results_root_dir (Path):
                 The directory to save the results to (this is unique for each process).
-            seed (int):
-                The seed for this process to use for inference.
         """
         infer_result_path = results_root_dir / "results_ds"
-        guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+        guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
             model_name_or_path, results_root_dir)
 
-        # Initialize the inference strategy with the vLLM server URL
+        # Initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
         inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
         inference_strategy = inference_strategy_lazy.construct(
@@ -379,8 +374,8 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
         logger.info(f"Rank {self.distributed_state.process_index} finished inference.")
         del results
         
-        self.vllm_server_handler.kill_server()
-        self.vllm_server_handler.compute_and_log_vllm_stats(results_root_dir)
+        self.inference_server_handler.kill_server()
+        self.inference_server_handler.compute_server_stats(results_root_dir)
         
         results = Dataset.load_from_disk(str(results_root_dir / "results_ds"))
         return results

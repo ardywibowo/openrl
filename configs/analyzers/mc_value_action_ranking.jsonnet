@@ -51,7 +51,8 @@ local num_alternative_actions = 5;
         node_expander+: { num_expansion_rounds: 1 },
     },
 
-    vllm_server+: {
+    inference_server+: {
+        type: "vllm",
         swap_space: 8,
         enable_prefix_caching: true,
     },

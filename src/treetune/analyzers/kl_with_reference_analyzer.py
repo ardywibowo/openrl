@@ -16,7 +16,7 @@ from wandb.apis.public import Run
 from treetune.analyzers.analyzer import Analyzer
 from treetune.common import Lazy, logging_utils
 from treetune.common.deepspeed_utils import prepare_data_loader_for_inference
-from treetune.common.vllm_server import VLLMServer
+from treetune.inference_servers import InferenceServer
 from treetune.episode_generators import TreeEpisodeUtils
 from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
@@ -37,7 +37,7 @@ class KLWithReferenceAnalyzer(Analyzer):
         self,
         task: Task,
         inference_strategy: Lazy[InferenceStrategy],
-        vllm_server: Lazy[VLLMServer],
+        inference_server: Lazy[InferenceServer],
         cloud_logger: Run,
         runtime,
         tokenizer: Tokenizer,
@@ -55,7 +55,7 @@ class KLWithReferenceAnalyzer(Analyzer):
 
         self.task = task
         self.inference_strategy_lazy = inference_strategy
-        self.vllm_server_lazy = vllm_server
+        self.inference_server_lazy = inference_server
 
         trainer = getattr(self.runtime, "trainer", None)
         if trainer is None or isinstance(trainer, Lazy):
@@ -135,23 +135,23 @@ class KLWithReferenceAnalyzer(Analyzer):
 
     def _compute_kl_with_reference(self, ckpt, seed: int) -> float:
 
-        # ------ STEP 1: generate the results using the vLLM server -------
-        vllm_server = self.vllm_server_lazy.construct(seed=seed)
+        # ------ STEP 1: generate the results using the inference server -------
+        inference_server = self.inference_server_lazy.construct(seed=seed)
         hf_ckpt_path = ckpt / "hf_pretrained"
 
         ckpt_eval_root_dir = self.get_analysis_root_dir() / ckpt.name
         ckpt_eval_root_dir.mkdir(exist_ok=True, parents=True)
         results_path = ckpt_eval_root_dir / "inference_results"
 
-        # save the tokenizer for the vllm if it does not exist
+        # save the tokenizer for the inference server if it does not exist
         if not (hf_ckpt_path / "tokenizer.json").exists():
-            logger.info(f"Tokenizer does not exist in {hf_ckpt_path}, saving it for vllm.")
+            logger.info(f"Tokenizer does not exist in {hf_ckpt_path}, saving it for the inference server.")
             self.tokenizer.save_pretrained(hf_ckpt_path)
 
-        server_url = vllm_server.start_server(
+        server_url = inference_server.start_server(
             hf_ckpt_path_or_model=str(hf_ckpt_path),
             wait_for_response=True,
-            log_path=results_path.parent / f"{results_path.stem}.vllm_log",
+            log_path=results_path.parent / f"{results_path.stem}.log",
             timeout=800,
         )
 
@@ -160,7 +160,7 @@ class KLWithReferenceAnalyzer(Analyzer):
             "model": str(hf_ckpt_path),
         }
 
-        # initialize the inference strategy with the vLLM server URL
+        # initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
         inference_strategy_lazy._params['guidance_llm'].update(guidance_llm_kwargs)
         infer_strategy = inference_strategy_lazy.construct(
@@ -178,7 +178,7 @@ class KLWithReferenceAnalyzer(Analyzer):
 
         results = infer_strategy.generate(ds)
         results.save_to_disk(str(results_path))
-        vllm_server.stop_server()
+        inference_server.stop_server()
 
         ds = Dataset.load_from_disk(str(results_path))
 

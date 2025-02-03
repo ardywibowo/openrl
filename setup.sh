@@ -17,3 +17,7 @@ cd DeepSpeed
 git checkout v0.15.4
 DS_BUILD_OPS=1 pip install . --global-option="build_ext" --global-option="-j8"
 ds_report
+
+pip install --upgrade pip
+pip install sgl-kernel --force-reinstall --no-deps
+pip install "sglang[all]" --find-links https://flashinfer.ai/whl/cu124/torch2.4/flashinfer/

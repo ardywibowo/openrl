@@ -11,134 +11,17 @@ from typing import Callable, Dict, Optional, Union
 import psutil
 import requests
 
-from . import FromParams
-from .logging_utils import get_logger
-from .notebook_utils import get_repo_dir
+from .utils import ensure_executable, find_and_kill_process, get_free_port, is_port_in_use_error
+from .base_server import InferenceServer
+from treetune.common.logging_utils import get_logger
+from treetune.common.notebook_utils import get_repo_dir
 
 logger = get_logger(__name__)
 
-
-def get_free_port() -> int:
-    """Find a free port by binding to port 0 and then releasing it."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("", 0))
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        return s.getsockname()[1]
-
-
-def ensure_executable(script_path: Union[str, Path]):
-    """Make sure the server script is executable."""
-    if not os.access(script_path, os.X_OK):
-        os.chmod(script_path, os.stat(script_path).st_mode | 0o111)
-
-
-def find_and_kill_process(port: int):
-    for proc in psutil.process_iter(["pid", "name", "connections"]):
-        try:
-            connections = proc.info["connections"]
-            if connections is None:
-                continue
-
-            for conn in connections:
-                if conn.laddr.port == port:
-                    # If the port matches, print process info and kill the process
-                    logger.info(
-                        f"Found process {proc.info['name']} with PID {proc.info['pid']} using port {port}"
-                    )
-                    os.kill(proc.info["pid"], 9)
-                    return
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
-
-def is_port_in_use_error(vllm_log: str) -> bool:
-    vllm_log = vllm_log.lower()
-    return (
-        "error while attempting to bind on address" in vllm_log
-        and "address already in use" in vllm_log
-    )
-
-
-def compute_vllm_stats(log_file_path: Path) -> Dict[str, float]:
-    gen_throughput_pattern = r"Avg generation throughput: ([\d.]+) tokens/s"
-    running_reqs_pattern = r"Running: (\d+) reqs"
-    pending_reqs_pattern = r"Pending: (\d+) reqs"
-    gpu_cache_pattern = r"GPU KV cache usage: ([\d.]+)%"
-    cpu_cache_pattern = r"CPU KV cache usage: ([\d.]+)%"
-
-    total_generation_throughput = 0.0
-    total_running_reqs = 0
-    total_pending_reqs = 0
-    total_gpu_kv_cache_usage = 0.0
-    total_cpu_kv_cache_usage = 0.0
-
-    gen_throughput_count = 0
-    running_reqs_count = 0
-    pending_reqs_count = 0
-    gpu_cache_count = 0
-    cpu_cache_count = 0
-
-    # Read the log file and process each line
-    with open(log_file_path, "r") as file:
-        for line in file:
-            gen_throughput_match = re.search(gen_throughput_pattern, line)
-            if gen_throughput_match:
-                total_generation_throughput += float(gen_throughput_match.group(1))
-                gen_throughput_count += 1
-
-            running_reqs_match = re.search(running_reqs_pattern, line)
-            if running_reqs_match:
-                total_running_reqs += int(running_reqs_match.group(1))
-                running_reqs_count += 1
-
-            pending_reqs_match = re.search(pending_reqs_pattern, line)
-            if pending_reqs_match:
-                total_pending_reqs += int(pending_reqs_match.group(1))
-                pending_reqs_count += 1
-
-            gpu_cache_match = re.search(gpu_cache_pattern, line)
-            if gpu_cache_match:
-                total_gpu_kv_cache_usage += float(gpu_cache_match.group(1))
-                gpu_cache_count += 1
-
-            cpu_cache_match = re.search(cpu_cache_pattern, line)
-            if cpu_cache_match:
-                total_cpu_kv_cache_usage += float(cpu_cache_match.group(1))
-                cpu_cache_count += 1
-
-    avg_generation_throughput = (
-        (total_generation_throughput / gen_throughput_count)
-        if gen_throughput_count > 0
-        else 0.0
-    )
-    avg_running_reqs = (
-        (total_running_reqs / running_reqs_count) if running_reqs_count > 0 else 0.0
-    )
-    avg_pending_reqs = (
-        (total_pending_reqs / pending_reqs_count) if pending_reqs_count > 0 else 0.0
-    )
-    avg_gpu_kv_cache_usage = (
-        (total_gpu_kv_cache_usage / gpu_cache_count) if gpu_cache_count > 0 else 0.0
-    )
-    avg_cpu_kv_cache_usage = (
-        (total_cpu_kv_cache_usage / cpu_cache_count) if cpu_cache_count > 0 else 0.0
-    )
-
-    return {
-        "avg_generation_throughput": avg_generation_throughput,
-        "avg_running_reqs": avg_running_reqs,
-        "avg_pending_reqs": avg_pending_reqs,
-        "avg_gpu_kv_cache_usage": avg_gpu_kv_cache_usage,
-        "avg_cpu_kv_cache_usage": avg_cpu_kv_cache_usage,
-    }
-
-
-class VLLMServer(FromParams):
+@InferenceServer.register("vllm")
+class VLLMServer(InferenceServer):
     def __init__(
         self,
-        seed: int = 42,
-        swap_space: int = 16,
-        gpu_memory_utilization: float = 0.9,
         max_num_seqs: int = 256,
         enable_prefix_caching: bool = False,
         disable_sliding_window: bool = False,
@@ -147,19 +30,16 @@ class VLLMServer(FromParams):
         script_path: Optional[Path] = None,
         server_running_check_url: str = "v1/models",
         port: Optional[int] = None,
+        **kwargs,
     ):
+        super().__init__(**kwargs)
+        
         if script_path is None:
             script_path = (
                 get_repo_dir() / "scripts" / "start_vllm_server_named_params.sh"
             )
         ensure_executable(script_path)
 
-        assert isinstance(gpu_memory_utilization, float)
-        assert 0.0 < gpu_memory_utilization <= 1.0
-
-        self.seed = seed
-        self.swap_space = swap_space
-        self.gpu_memory_utilization = gpu_memory_utilization
         self.max_num_seqs = max_num_seqs
         self.enable_prefix_caching = enable_prefix_caching
         self.disable_sliding_window = disable_sliding_window
@@ -323,3 +203,76 @@ class VLLMServer(FromParams):
             subprocess.run(["pkill", "-9", "-f", f"vllm.entrypoints.openai.api_server.*port {self.port}"], check=False)
         except Exception as e:
             logger.error(f"Error using pkill: {e}")
+    
+    def compute_stats(self, log_file_path: Path) -> Dict[str, float]:
+        gen_throughput_pattern = r"Avg generation throughput: ([\d.]+) tokens/s"
+        running_reqs_pattern = r"Running: (\d+) reqs"
+        pending_reqs_pattern = r"Pending: (\d+) reqs"
+        gpu_cache_pattern = r"GPU KV cache usage: ([\d.]+)%"
+        cpu_cache_pattern = r"CPU KV cache usage: ([\d.]+)%"
+
+        total_generation_throughput = 0.0
+        total_running_reqs = 0
+        total_pending_reqs = 0
+        total_gpu_kv_cache_usage = 0.0
+        total_cpu_kv_cache_usage = 0.0
+
+        gen_throughput_count = 0
+        running_reqs_count = 0
+        pending_reqs_count = 0
+        gpu_cache_count = 0
+        cpu_cache_count = 0
+
+        # Read the log file and process each line
+        with open(log_file_path, "r") as file:
+            for line in file:
+                gen_throughput_match = re.search(gen_throughput_pattern, line)
+                if gen_throughput_match:
+                    total_generation_throughput += float(gen_throughput_match.group(1))
+                    gen_throughput_count += 1
+
+                running_reqs_match = re.search(running_reqs_pattern, line)
+                if running_reqs_match:
+                    total_running_reqs += int(running_reqs_match.group(1))
+                    running_reqs_count += 1
+
+                pending_reqs_match = re.search(pending_reqs_pattern, line)
+                if pending_reqs_match:
+                    total_pending_reqs += int(pending_reqs_match.group(1))
+                    pending_reqs_count += 1
+
+                gpu_cache_match = re.search(gpu_cache_pattern, line)
+                if gpu_cache_match:
+                    total_gpu_kv_cache_usage += float(gpu_cache_match.group(1))
+                    gpu_cache_count += 1
+
+                cpu_cache_match = re.search(cpu_cache_pattern, line)
+                if cpu_cache_match:
+                    total_cpu_kv_cache_usage += float(cpu_cache_match.group(1))
+                    cpu_cache_count += 1
+
+        avg_generation_throughput = (
+            (total_generation_throughput / gen_throughput_count)
+            if gen_throughput_count > 0
+            else 0.0
+        )
+        avg_running_reqs = (
+            (total_running_reqs / running_reqs_count) if running_reqs_count > 0 else 0.0
+        )
+        avg_pending_reqs = (
+            (total_pending_reqs / pending_reqs_count) if pending_reqs_count > 0 else 0.0
+        )
+        avg_gpu_kv_cache_usage = (
+            (total_gpu_kv_cache_usage / gpu_cache_count) if gpu_cache_count > 0 else 0.0
+        )
+        avg_cpu_kv_cache_usage = (
+            (total_cpu_kv_cache_usage / cpu_cache_count) if cpu_cache_count > 0 else 0.0
+        )
+
+        return {
+            "avg_generation_throughput": avg_generation_throughput,
+            "avg_running_reqs": avg_running_reqs,
+            "avg_pending_reqs": avg_pending_reqs,
+            "avg_gpu_kv_cache_usage": avg_gpu_kv_cache_usage,
+            "avg_cpu_kv_cache_usage": avg_cpu_kv_cache_usage,
+        }

@@ -85,9 +85,13 @@ local math_validation_inference_pipeline =
         dataset_portion: 0.01,
         total_num_iterations: total_num_iterations,
         
-        vllm_server_handler +: {
+        inference_server_handler +: {
             min_available_gpu_memory_mb: 10 * 1024,
-            vllm_server+: { swap_space: 8, max_num_seqs: 512 },
+            inference_server+: { 
+                type: "vllm",
+                swap_space: 8, 
+                max_num_seqs: 512 
+            },
         },
         
         inference_strategy: {

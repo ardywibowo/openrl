@@ -22,7 +22,7 @@ from treetune.common import JsonDict, Lazy, Params
 from treetune.common.logging_utils import get_logger
 from treetune.common.notebook_utils import get_repo_dir
 from treetune.common.py_utils import need_to_minimize_stored_files
-from treetune.common.vllm_server import VLLMServer
+from treetune.inference_servers import InferenceServer
 from treetune.episode_generators.base_episode_generator import EpisodeGenerator
 from treetune.models.base_model import Model
 from treetune.pipelines.base_inference_pipeline import InferencePipeline
@@ -50,7 +50,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         num_iterations: int,
         num_episodes_per_iteration: Optional[int],
         model: Optional[Lazy[Model]] = None,
-        evaluation_vllm_server: Lazy[VLLMServer] = None,
+        evaluation_inference_server: Lazy[InferenceServer] = None,
         inference_pipelines: Optional[List[JsonDict]] = None,
         clean_non_model_checkpoints: bool = True,
         evaluate_every_n_checkpoints: int = 1,
@@ -74,7 +74,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         self.episode_generator = episode_generator
         self.trainer = trainer
 
-        self.evaluation_vllm_server = evaluation_vllm_server
+        self.evaluation_inference_server = evaluation_inference_server
         self.inference_pipeline_configs = inference_pipelines
 
         self.clean_non_model_checkpoints = clean_non_model_checkpoints
@@ -191,7 +191,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             latest_policy_path = last_checkpoint.path / "hf_pretrained"
             if self.tokenizer is not None and is_local_main_process:
                 # Save the tokenizer to enable seamless loading
-                # of the model into vLLM
+                # of the model into the inference server
                 self.tokenizer.save_pretrained(latest_policy_path)
             if is_local_main_process:
                 logger.info(f"**** Resuming from iteration {starting_iteration} ****")
@@ -240,7 +240,7 @@ class PolicyIterationRuntime(DistributedRuntime):
                 and is_local_main_process
             ):
                 # Save the tokenizer to enable seamless loading
-                # of the model into vLLM
+                # of the model into the inference server
                 self.tokenizer.save_pretrained(latest_policy_path)
 
             if is_local_main_process:
@@ -336,27 +336,26 @@ class PolicyIterationRuntime(DistributedRuntime):
                 continue
 
             logger.info(f"Running inference on checkpoint {ckpt.name} at \n{ckpt}")
-            vllm_ckpt_dir = self._prepare_ckpt_for_vllm(ckpt)
-            vllm_server = self.evaluation_vllm_server.construct(
+            ckpt_dir = self._prepare_ckpt_for_inference(ckpt)
+            inference_server = self.evaluation_inference_server.construct(
                 seed=self.global_vars["seed"]
             )
 
             logs_dir = evaluation_root_dir / "logs"
             logs_dir.mkdir(exist_ok=True, parents=True)
 
-            vllm_log_file = logs_dir / f"vllm__{vllm_ckpt_dir.name}.log"
-            if vllm_log_file.exists():
-                vllm_log_file.unlink()
-            vllm_log_file.touch()
+            inference_log_file = logs_dir / f"inference__{ckpt_dir.name}.log"
+            if inference_log_file.exists():
+                inference_log_file.unlink()
+            inference_log_file.touch()
 
-            logger.info(f"Starting VLLM server with log file {vllm_log_file}")
-            server_url = vllm_server.start_server(
-                hf_ckpt_path_or_model=vllm_ckpt_dir,
+            logger.info(f"Starting inference server with log file {inference_log_file}")
+            server_url = inference_server.start_server(
+                hf_ckpt_path_or_model=ckpt_dir,
                 wait_for_response=True,
-                log_path=vllm_log_file,
+                log_path=inference_log_file,
                 timeout=800,
             )
-            os.environ["APP_OPENAI_VLLM_API_BASE"] = "none"
 
             # Run inference on all pipelines
             for pipeline_cfg in self.inference_pipeline_configs:
@@ -372,7 +371,7 @@ class PolicyIterationRuntime(DistributedRuntime):
                     tokenizer=self.tokenizer,
                     seed=2746318213,
                     api_base_url=server_url,
-                    model_name=str(vllm_ckpt_dir),
+                    model_name=str(ckpt_dir),
                     metrics_prefix=f"{ckpt.name}/",
                     enable_cloud_logging_during_inference=False,
                     use_cache=True,
@@ -388,10 +387,10 @@ class PolicyIterationRuntime(DistributedRuntime):
             # Mark the checkpoint as done
             (eval_dir / "done").touch()
 
-            vllm_server.stop_server()
+            inference_server.stop_server()
 
-            # Remove vllm checkpoint directory
-            shutil.rmtree(vllm_ckpt_dir)
+            # Remove checkpoint directory
+            shutil.rmtree(ckpt_dir)
 
         # Also, run the analyzers if any
         self._run_analyzers(every_n_checkpoints, force_rerun)
@@ -566,21 +565,20 @@ class PolicyIterationRuntime(DistributedRuntime):
             return
 
         logger.info(f"Running inference on checkpoint baseline")
-        vllm_ckpt = self.tokenizer.name_or_path
-        vllm_server = self.evaluation_vllm_server.construct(
+        model_ckpt = self.tokenizer.name_or_path
+        inference_server = self.evaluation_inference_server.construct(
             seed=self.global_vars["seed"]
         )
 
         logs_dir = evaluation_root_dir / "logs"
         logs_dir.mkdir(exist_ok=True, parents=True)
 
-        server_url = vllm_server.start_server(
-            hf_ckpt_path_or_model=vllm_ckpt,
+        server_url = inference_server.start_server(
+            hf_ckpt_path_or_model=model_ckpt,
             wait_for_response=True,
-            log_path=logs_dir / f"vllm__baseline.log",
+            log_path=logs_dir / f"inference__baseline.log",
             timeout=800,
         )
-        os.environ["APP_OPENAI_VLLM_API_BASE"] = "none"
 
         # Run inference on all pipelines
         for pipeline_cfg in self.inference_pipeline_configs:
@@ -596,7 +594,7 @@ class PolicyIterationRuntime(DistributedRuntime):
                 tokenizer=self.tokenizer,
                 seed=self.global_vars["seed"],
                 api_base_url=server_url,
-                model_name=vllm_ckpt,
+                model_name=model_ckpt,
                 metrics_prefix="baseline/",
                 enable_cloud_logging_during_inference=False,
                 use_cache=True,
@@ -611,7 +609,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         # Mark the checkpoint as done
         (eval_dir / "done").touch()
 
-        vllm_server.stop_server()
+        inference_server.stop_server()
 
     def _precompute_episodes(self) -> int:
         """
@@ -791,7 +789,7 @@ class PolicyIterationRuntime(DistributedRuntime):
             log_to_cloud=iteration_idx % self.episodes_cloud_log_steps == 0,
         )
 
-    def _prepare_ckpt_for_vllm(self, ckpt_dir: Path) -> Path:
+    def _prepare_ckpt_for_inference(self, ckpt_dir: Path) -> Path:
         """Prepare the checkpoint directory for evaluation."""
 
         # Use current working directory to create temporary ckpt path
@@ -852,8 +850,8 @@ class PolicyIterationRuntime(DistributedRuntime):
         pytorch_model_dir = ckpt_dir / "pytorch_model"
         if pytorch_model_dir.exists() and pytorch_model_dir.is_dir():
             # We need to use `zero_to_fp32.py` to convert the checkpoint
-            # to a format that can be loaded by vLLM
-            logger.info("Converting DeepSpeed checkpoint to vLLM checkpoint")
+            # to a format that can be loaded by the inference server
+            logger.info("Converting DeepSpeed checkpoint to inference checkpoint")
             command = f"python {get_zero_to_fp32_script_path()} {ckpt_dir} {output_dir}/pytorch_model.bin"
 
             # Run the command using subprocess

@@ -67,9 +67,9 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             )
         alt_cont_reqs = Dataset.from_list(alt_cont_reqs)
 
-        # Start the vLLM server
-        vllm_log_path = ckpt_eval_root_dir / "vllm_server.log"
-        llm_kwargs = self._start_vllm_server(ckpt, vllm_log_path)
+        # Start the inference server
+        inference_server_log_path = ckpt_eval_root_dir / "server.log"
+        llm_kwargs = self._start_inference_server(ckpt, inference_server_log_path)
 
         if need_to_minimize_stored_files():
             infer_result_root = Path(tempfile.mkdtemp())
@@ -114,8 +114,8 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             seed=42,
         )
 
-        # Kill the vLLM server as it is no longer needed
-        self._kill_vllm_server()
+        # Kill the inference server as it is no longer needed
+        self._kill_inference_server()
 
         # Update states with the ground truth values
         for res in tqdm(
@@ -405,7 +405,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
         request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
-        # Initialize the inference strategy with the vLLM server URL
+        # Initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(inference_strategy)
         # noinspection PyProtectedMember
         inference_strategy_lazy._params["guidance_llm"].update(llm_kwargs)
@@ -428,12 +428,12 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
     ) -> Union[List[Dict[str, Any]], Dataset]:
         raise NotImplementedError
 
-    def _start_vllm_server(self, checkpoint: Path, log_path: Path) -> Dict[str, str]:
+    def _start_inference_server(self, checkpoint: Path, log_path: Path) -> Dict[str, str]:
         assert (
-            getattr(self, "vllm_server", None) is None
-        ), "vLLM server is already running."
+            getattr(self, "inference_server", None) is None
+        ), "inference server is already running."
 
-        # Save gpu memory usage before starting the vLLM server so that
+        # Save gpu memory usage before starting the inference server so that
         # we can check if the memory has been released after the server is stopped
         if self.distributed_state is not None:
             self._gpu_idx = self.distributed_state.device.index
@@ -441,12 +441,12 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             self._gpu_idx = 0
         self._gpu_memory_usage_before_mb = get_gpu_memory()[self._gpu_idx]
 
-        vllm_server = self.vllm_server_lazy.construct(seed=42)
-        self.vllm_server = vllm_server
+        inference_server = self.inference_server_lazy.construct(seed=42)
+        self.inference_server = inference_server
 
         hf_ckpt_path_or_model = checkpoint / "hf_pretrained"
         self.tokenizer.save_pretrained(hf_ckpt_path_or_model)
-        server_url = vllm_server.start_server(
+        server_url = inference_server.start_server(
             hf_ckpt_path_or_model=str(hf_ckpt_path_or_model),
             wait_for_response=True,
             log_path=log_path,
@@ -460,8 +460,8 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
 
         return llm_kwargs
 
-    def _kill_vllm_server(self) -> None:
-        self.vllm_server.stop_server()
+    def _kill_inference_server(self) -> None:
+        self.inference_server.stop_server()
 
         threshold_mb = self._gpu_memory_usage_before_mb * 1.1  # Allow for 10% tolerance
         wait_for_memory_release(
@@ -469,4 +469,4 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             threshold_mb=threshold_mb,
         )
 
-        self.vllm_server = None
+        self.inference_server = None

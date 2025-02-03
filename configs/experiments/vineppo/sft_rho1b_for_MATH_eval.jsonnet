@@ -117,5 +117,5 @@ local olympiadbench_test_inference_pipeline =
         olympiadbench_test_inference_pipeline,
     ],
 
-    evaluation_vllm_server: {},
+    evaluation_inference_server: {},
 }

@@ -16,8 +16,9 @@ local sampling_temperature = 0.6;
 + (import 'trainers/dpo_positive_MATH.jsonnet')
 + {
     episode_generator+: {
-        vllm_server_handler+: {
-            vllm_server+: {
+        inference_server_handler+: {
+            inference_server+: {
+                type: "vllm",
                 swap_space: 8,
             },
         },

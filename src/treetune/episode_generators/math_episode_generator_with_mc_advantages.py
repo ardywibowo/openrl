@@ -4,7 +4,7 @@ import logging
 import pickle
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from accelerate.utils import release_memory
@@ -13,7 +13,6 @@ from tqdm import tqdm
 
 from treetune.common import Lazy
 from treetune.common.logging_utils import get_logger
-from treetune.common.vllm_server import VLLMServer
 from treetune.episode_generators import EpisodeGenerator, MathEpisodeGenerator
 from treetune.episodes import Episode
 from treetune.inference_strategies import InferenceStrategy
@@ -40,22 +39,6 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         model_name_or_path: str,
         results_root_dir: Path,
     ):
-        vllm_server_ptr, guidance_llm_kwargs_ptr = [], []
-
-        # def get_vllm_server():
-        #     if len(vllm_server_ptr) == 0:
-        #         out = vllm_init_fn()
-        #         vllm_server_ptr.append(out[0])
-        #         guidance_llm_kwargs_ptr.append(out[1])
-
-        #     return vllm_server_ptr[0], guidance_llm_kwargs_ptr[0]
-
-        # def kill_vllm_server():
-        #     if len(vllm_server_ptr) > 0:
-        #         vllm_server_ptr[0].stop_server()
-        #         vllm_server_ptr.pop()
-        #         guidance_llm_kwargs_ptr.pop()
-
         def try_loading_inference_results(results_path: Path) -> Optional[Dataset]:
             logger.info(f"Always generating from scratch")
             return None
@@ -66,7 +49,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_result_path = results_root_dir / "traj_results_ds"
         traj_infer_results = try_loading_inference_results(traj_result_path)
         if traj_infer_results is None:
-            guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+            guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -96,7 +79,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         unique_results = try_loading_inference_results(val_est_result_path)
         if unique_results is None:
-            guidance_llm_kwargs = self.vllm_server_handler.get_or_create_vllm_server_with_model(
+            guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -131,7 +114,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             self.distributed_state.wait_for_everyone()
             unique_results = Dataset.load_from_disk(str(val_est_result_path))
         
-        self.vllm_server_handler.kill_server()
+        self.inference_server_handler.kill_server()
 
         # Distribute the value estimation results back according to the process index
         process_idx = self.distributed_state.process_index
@@ -787,7 +770,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         request_ids = requests_ds["__uuid__"]
         assert len(request_ids) == len(set(request_ids)), "Duplicate request ids found."
 
-        # Initialize the inference strategy with the vLLM server URL
+        # Initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(inference_strategy_lazy)
         # noinspection PyProtectedMember
         inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)

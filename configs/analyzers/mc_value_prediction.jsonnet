@@ -42,7 +42,8 @@ local guidance_program = '{{prefix}}{{gen "chain_of_thought" temperature={temper
         no_cache: true,
     },
 
-    vllm_server+: {
+    inference_server+: {
+        type: "vllm",
         swap_space: 8,
         enable_prefix_caching: true,
     },

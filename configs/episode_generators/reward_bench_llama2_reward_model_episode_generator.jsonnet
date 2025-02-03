@@ -16,8 +16,9 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         dataset_shuffle_before_portion: true,
         dataset_sample_with_replacement: false,
         
-        vllm_server_handler+: {
-            vllm_server+: {
+        inference_server_handler+: {
+            inference_server+: {
+                type: "vllm",
                 swap_space: 8,
             },
             gpu_memory_utilization: 'auto',

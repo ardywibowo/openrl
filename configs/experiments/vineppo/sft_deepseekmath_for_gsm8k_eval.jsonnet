@@ -80,5 +80,5 @@ local gsm8k_validation_inference_pipeline =
         gsm8k_train_inference_pipeline,
     ],
 
-    evaluation_vllm_server: {},
+    evaluation_inference_server: {},
 }

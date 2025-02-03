@@ -36,9 +36,14 @@ py-cpuinfo
 sentencepiece
 jsonlines
 pylatexenc
+python-chess
 deepspeed-kernels
 triton
 vllm
 xformers
 cchardet
-python-chess
+sglang
+orjson
+sgl-kernel
+decord
+python-multipart

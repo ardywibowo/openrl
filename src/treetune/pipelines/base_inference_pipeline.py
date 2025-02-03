@@ -23,7 +23,7 @@ class InferencePipeline(Registrable):
     pass
 
 
-@InferencePipeline.register("vllm")
+@InferencePipeline.register("vllm_pipeline")
 class VLLMInferencePipeline(InferencePipeline):
     def __init__(
         self,
@@ -233,4 +233,4 @@ class VLLMInferencePipeline(InferencePipeline):
         self.cloud_logger.save(str(inference_results_zip.absolute()), policy="now")
 
 
-InferencePipeline.default_implementation = "vllm"
+InferencePipeline.default_implementation = "vllm_pipeline"
