@@ -4,7 +4,7 @@
 source ./private/keys.sh
 
 # Timeout duration in seconds
-TIMEOUT_DURATION=450  # Set the timeout in seconds
+TIMEOUT_DURATION=240  # Set the timeout in seconds
 
 # List of configuration names
 CONFIG_NAMES=(
@@ -17,7 +17,6 @@ CONFIG_NAMES=(
   "experiments/reward_modeling/reward_modeling_llama2"
   "experiments/reward_modeling/reward_modeling_llama2_value_head_finetune"
 )
-
 
 # Keep track of any failures
 FAILED_TESTS=()
@@ -48,7 +47,7 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
 
   # 1) Start training as a background job, with output redirected to our log file.
   deepspeed --no_local_rank --num_gpus="$NUM_GPUS" \
-            src/treetune/main.py --configs "$CONFIGSTR" \
+            src/openrl/main.py --configs "$CONFIGSTR" \
             run_iteration_loop \
             > "$LOG_FILE" 2>&1 &
   TRAIN_PID=$!
@@ -94,6 +93,17 @@ for CONFIG_NAME in "${CONFIG_NAMES[@]}"; do
   echo "Killing any leftover Python processes..."
   ps aux | grep python | grep -v grep | awk '{print $2}' | xargs kill -9 2>/dev/null
   echo "----------------------------------------------------"
+
+  # Check if GPU memory is cleared before starting the next configuration
+  while true; do
+    GPU_MEMORY_USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | awk '{sum+=$1} END {print sum}')
+    if [ "$GPU_MEMORY_USED" -lt 500 ]; then
+      break
+    fi
+    echo "Waiting for GPU memory to clear... Current usage: ${GPU_MEMORY_USED}MB"
+    sleep 5
+  done
+
 done
 
 # Final report
