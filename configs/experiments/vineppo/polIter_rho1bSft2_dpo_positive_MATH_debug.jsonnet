@@ -16,16 +16,13 @@ local math_inference_pipeline =
     + (import 'inference_strategies/cot.jsonnet')
     + {
         inference_strategy+: {
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 128,
-
             node_expander+: {
                 type: 'efficient_iid',
-                program_kwargs: {
+                sampling_parameters: {
                     temperature: 0.35,
                     top_p: 0.9,
                     max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                    stop: "\n\n\nProblem:",
                 },
                 node_text_template: '{chain_of_thought}',
 
@@ -42,8 +39,7 @@ local math_inference_pipeline =
             },
             samples: 16,
             max_depth: 10,
-
-            guidance_llm: (import 'guidance_llms/rho1b-sft-MATH.jsonnet') + { api_base: 'none' },
+            
             no_cache: true,
             question_field: 'query',
 
@@ -88,7 +84,7 @@ local math_validation_inference_pipeline =
         inference_server_handler +: {
             min_available_gpu_memory_mb: 10 * 1024,
             inference_server+: { 
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8, 
                 max_num_seqs: 512 
             },
@@ -96,21 +92,16 @@ local math_validation_inference_pipeline =
         
         inference_strategy: {
             type: 'cot',
-
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 512,
-
             samples: num_rollouts_per_sample,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
             node_expander: {
                 type: 'efficient_iid',
-                program: $.prompt_library.tree.expansion.iid,
-                program_kwargs+: {
+                sampling_parameters+: {
                     temperature: sampling_temperature,
                     top_p: 0.9,
                     max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                    stop: "\n\n\nProblem:",
                 },
                 node_text_template: '{chain_of_thought}',
 
@@ -123,8 +114,6 @@ local math_validation_inference_pipeline =
                 type: 'identity',
                 node_key_name: 'text',
             },
-
-            guidance_llm: (import 'guidance_llms/rho1b-sft-MATH.jsonnet') + { api_base: 'none' },
 
             question_field: 'query',
             question_template: $.prompt_library.tree.question_template,

@@ -75,7 +75,7 @@ class PolicyTrainer(Trainer):
         num_iterations: int = 1,
         num_epochs_per_iteration: int = 1,
         init_model_only: bool = False,
-        data_collator: Optional[DataCollator] = None,
+        data_collator: Optional[DataCollator] = None, # type: ignore
         deepspeed_config: Optional[JsonDict] = None,
         **kwargs,
     ):

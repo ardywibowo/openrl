@@ -3,9 +3,9 @@
 {
     inference_strategy+: {
         node_expander+: {
-            program_kwargs+: {
-                cot1_temperature: 1.7,
-            },
+            high_temp_params+: {
+                temperature: 1.7
+            }
         },
     },
 }

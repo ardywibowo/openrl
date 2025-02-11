@@ -3,7 +3,7 @@
 {
     inference_strategy+: {
         node_expander+: {
-            program_kwargs+: {
+            sampling_parameters+: {
                 temperature: 1.7,
             },
         },

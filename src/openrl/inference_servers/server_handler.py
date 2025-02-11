@@ -62,7 +62,7 @@ class InferenceServerHandler(Component):
         self._server, self._server_configs = init_fn()
         self._cleanup_fn = cleanup_fn
         
-        return self._server_configs
+        return self._server_configs['api_base']
     
     def kill_server(self):
         if self._server is None:

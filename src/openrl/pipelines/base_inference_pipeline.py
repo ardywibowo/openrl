@@ -131,18 +131,13 @@ class VLLMInferencePipeline(InferencePipeline):
             # P.S. no_cache was a stupid name. We should refactor it some time.
             inference_strategy_kwargs["no_cache"] = not use_cache
         if api_base_url is not None:
-            if "guidance_llm" not in inference_strategy._params:
-                logger.warning("api_base_url is not used in the inference strategy.")
+            if "server_url" not in inference_strategy._params:
+                logger.warning("server_url is not used in the inference strategy.")
             else:
-                inference_strategy._params["guidance_llm"]["api_base"] = api_base_url
-        if model_name is not None:
-            if "guidance_llm" not in inference_strategy._params:
-                logger.warning("model_name is not used in the inference strategy.")
-            else:
-                inference_strategy._params["guidance_llm"]["model"] = model_name
+                inference_strategy._params["server_url"] = api_base_url
 
         logger.info(
-            f"Guidance LLM params: {inference_strategy._params.get('guidance_llm', {}).as_dict()}"
+            f"Inference Server URL: {inference_strategy._params.get('server_url', '')}"
         )
         self.inference_strategy = inference_strategy.construct(
             **inference_strategy_kwargs

@@ -94,7 +94,7 @@ class PolicyIterationRuntime(DistributedRuntime):
         if self.model_lazy is not None:
             if (
                 self.model._params.get("hf_model_name") == "facebook/opt-125m"
-            ):  # todo: milad, this is kind of ugly, but why it is necessary?
+            ):
                 self.model = self.model_lazy.construct(pretrained_args={})
             else:
                 self.model = self.model_lazy.construct(

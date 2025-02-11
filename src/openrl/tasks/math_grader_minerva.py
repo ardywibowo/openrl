@@ -70,11 +70,11 @@ class SympySimplifier:
     """
 
     @classmethod
-    def _set_pool(cls, pool: Pool):
+    def _set_pool(cls, pool: Pool): # type: ignore
         cls._pool = pool
 
     @classmethod
-    def _get_process_pool(cls) -> Pool:
+    def _get_process_pool(cls) -> Pool: # type: ignore
         if not hasattr(cls, "_pool"):
             cls._set_pool(Pool(1))
         return cls._pool

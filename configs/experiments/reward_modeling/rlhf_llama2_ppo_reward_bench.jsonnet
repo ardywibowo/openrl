@@ -35,17 +35,12 @@ local sampling_temperature = 0.6;
 
         inference_strategy: {
             type: 'cot',
-
-            max_concurrent_programs: 128,
-            max_concurrent_generations: 64,
-
             samples: num_rollouts_per_sample,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
             node_expander: {
                 type: 'efficient_iid',
-                program: $.prompt_library.tree.expansion.iid,
-                program_kwargs+: {
+                sampling_parameters+: {
                     temperature: sampling_temperature,
                     top_p: 0.9,
                     max_tokens: 1024,
@@ -62,8 +57,6 @@ local sampling_temperature = 0.6;
                 node_key_name: 'text',
             },
 
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-MATH-v2.jsonnet') + { api_base: 'none' },
-
             question_field: 'query',
             question_template: $.prompt_library.tree.question_template,
 
@@ -79,7 +72,7 @@ local sampling_temperature = 0.6;
     episodes_cloud_log_steps: 50,
 
     trainer+: {
-        params+: { temperature: $.episode_generator.inference_strategy.node_expander.program_kwargs.temperature },
+        params+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
 
         actor_model+: { hf_model_name: $.episode_generator.initial_model_name_or_path },
         critic_model+: { pretrained_backbone_model+: { hf_model_name: $.episode_generator.initial_model_name_or_path } },
@@ -99,7 +92,7 @@ local sampling_temperature = 0.6;
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
             inference_server+: { 
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8 
             },
 
@@ -108,13 +101,8 @@ local sampling_temperature = 0.6;
             max_num_requests: 512,
 
             inference_strategy+: {
-                guidance_llm: $.episode_generator.inference_strategy.guidance_llm,
-
-                max_concurrent_programs: 32,
-                max_concurrent_generations: 16,
-
                 node_expander+: {
-                    program_kwargs+: { temperature: $.episode_generator.inference_strategy.node_expander.program_kwargs.temperature },
+                    sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.max_sequence_length,
                     tokenizer: $.tokenizer,
                 },
@@ -129,7 +117,7 @@ local sampling_temperature = 0.6;
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
             inference_server+: { 
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8 
             },
 
@@ -141,14 +129,8 @@ local sampling_temperature = 0.6;
             append_bos_to_query: $.episode_generator.append_bos_to_query,
 
             inference_strategy+: {
-                guidance_llm: $.episode_generator.inference_strategy.guidance_llm,
-
-                // Small model. Can afford more concurrent programs.
-                max_concurrent_programs: 32,
-                max_concurrent_generations: 16,
-
                 node_expander+: {
-                    program_kwargs+: { temperature: $.episode_generator.inference_strategy.node_expander.program_kwargs.temperature },
+                    sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.inference_strategy.node_expander.model_context_size,
                     tokenizer: $.tokenizer,
                 },

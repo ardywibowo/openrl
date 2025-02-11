@@ -154,16 +154,10 @@ class KLWithReferenceAnalyzer(Analyzer):
             log_path=results_path.parent / f"{results_path.stem}.log",
             timeout=800,
         )
-
-        guidance_llm_kwargs = {
-            "api_base": server_url,
-            "model": str(hf_ckpt_path),
-        }
-
+        
         # initialize the inference strategy with the inference server URL
-        inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
-        inference_strategy_lazy._params['guidance_llm'].update(guidance_llm_kwargs)
-        infer_strategy = inference_strategy_lazy.construct(
+        infer_strategy = self.inference_strategy_lazy.construct(
+            server_url=server_url,
             result_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
             seed=seed,
             cloud_logger=self.cloud_logger,
@@ -198,10 +192,11 @@ class KLWithReferenceAnalyzer(Analyzer):
         if isinstance(actor, DeepSpeedEngine):
             assert actor.zero_optimization_stage() == 0, "Zero stage must be 0"  # todo(milad): why?
 
-        ds = self.trainer._update_episodes_with_log_probs(model_engine=actor,
-                                                          dataset=ds,
-                                                          column_name=COLUMN_ACTOR_SHIFTED_LOGPS,
-                                                          )
+        ds = self.trainer._update_episodes_with_log_probs(
+            model_engine=actor,
+            dataset=ds,
+            column_name=COLUMN_ACTOR_SHIFTED_LOGPS
+        )
 
         self.trainer._destroy_ds_engine(actor)
         del actor

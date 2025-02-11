@@ -13,16 +13,13 @@ local math_inference_pipeline =
     + (import 'inference_strategies/cot.jsonnet')
     + {
         inference_strategy+: {
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 16,
-
             node_expander+: {
                 type: 'efficient_iid',
-                program_kwargs: {
+                sampling_parameters: {
                     temperature: temperature,
                     top_p: 0.9,
                     max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                    stop: "\n\n\nProblem:",
                 },
                 node_text_template: '{chain_of_thought}',
 
@@ -37,7 +34,6 @@ local math_inference_pipeline =
             samples: num_samples,
             max_depth: 10,
 
-            guidance_llm: (import 'guidance_llms/deepseekmath7b_base.jsonnet') + { api_base: 'none' },
             no_cache: true,
             question_field: 'query',
         },

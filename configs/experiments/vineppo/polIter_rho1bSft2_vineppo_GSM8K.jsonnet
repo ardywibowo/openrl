@@ -9,14 +9,8 @@ local total_num_iterations = 650;
         // Override the task
         task: task,
         reward_function+: { math_task: $.episode_generator.task },
-
         initial_model_name_or_path: hf_model_name,
-
         max_step_for_value_estimation: 25,
-
-        inference_strategy+: {
-            guidance_llm: (import 'guidance_llms/rho1b-sft-GSM8K.jsonnet') + { api_base: 'none' },
-        },
     },
     num_iterations: total_num_iterations,
 }

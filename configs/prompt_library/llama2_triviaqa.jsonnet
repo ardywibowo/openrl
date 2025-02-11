@@ -1,4 +1,4 @@
-local tree_expansion_iid = '{{prefix}}{{gen "thinking_process" temperature={temperature} top_p={top_p} top_k={top_k} max_tokens={max_tokens} save_stop_text="stop_text" stop={stop} logprobs={logprobs} n={num_samples}}}
+local tree_expansion_iid = '{prefix}{{gen "thinking_process" temperature={temperature} top_p={top_p} top_k={top_k} max_tokens={max_tokens} save_stop_text="stop_text" stop={stop} logprobs={logprobs} n={num_samples}}}
 Thus, the answer in few words is: {{gen "chain_of_thought" temperature=0.2 top_p=0.95 top_k=20 max_tokens=20 logprobs={logprobs}}}';
 
 local tree_question_template = '[INST] <<SYS>>

@@ -368,7 +368,7 @@ class DeepSpeedPolicyTrainer(Trainer):
             delete_attr(param, "_hp_mapping")
 
         ds_engine.empty_partition_cache()
-        ds_engine.destroy()     # todo(milad): why deeospeed has these globals
+        ds_engine.destroy()
 
     def log_tensors_on_gpu(self):
         if not self._is_main_process():

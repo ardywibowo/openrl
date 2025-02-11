@@ -1,4 +1,3 @@
-import asyncio
 import os
 import random
 import re
@@ -7,39 +6,15 @@ from typing import Callable, List, Optional
 
 import evaluate
 import numpy as np
+import sglang as sgl
 
-from openrl.common import JsonDict, Registrable
-from openrl.common import guidance_utils as gu
-from openrl.common import logging_utils
+from openrl.common import JsonDict, Registrable, Tokenizer, logging_utils
 from openrl.common.py_utils import format_string
 from openrl.inference_strategies.tree_inference import Node
 from openrl.inference_strategies.tree_inference.branch_factor_strategy import \
     BranchFactorStrategy
-from openrl.common import Tokenizer
 
 logger = logging_utils.get_logger(__name__)
-
-
-def replace_gen_pattern(s, my_repl):
-    start_pattern = "{{gen"
-    end_pattern = "}}"
-
-    # Find the start index
-    start_index = s.find(start_pattern)
-    if start_index == -1:
-        return s  # Start pattern not found, return original string
-
-    # Find the end index starting from the end of the string
-    end_index = s.rfind(end_pattern)
-    if end_index == -1:
-        return s  # End pattern not found, return original string
-
-    # Adjust end index to include the end pattern
-    end_index += len(end_pattern)
-
-    # Replace the pattern with `my_repl`
-    return s[:start_index] + my_repl + s[end_index:]
-
 
 class NodeExpander(Registrable):
     def __init__(
@@ -47,53 +22,48 @@ class NodeExpander(Registrable):
     ):
         self.branch_factor_strategy = branch_factor_strategy
         self.seed = seed
-        self._run_program = gu.run_program
-
-    def set_run_program(self, run_program):
-        self._run_program = run_program
 
     def set_seed(self, seed):
         self.seed = seed
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         raise NotImplementedError()
 
 
 @NodeExpander.register("iid")
 class IIDExpander(NodeExpander):
     def __init__(
-        self, program: str, node_text_template: str, program_kwargs: JsonDict, **kwargs
+        self, node_text_template: str, sampling_parameters: JsonDict, **kwargs
     ):
         super().__init__(**kwargs)
 
-        if "logprobs" not in program_kwargs:
-            program_kwargs["logprobs"] = 0
+        if "logprobs" not in sampling_parameters:
+            sampling_parameters["logprobs"] = 0
         else:
-            assert program_kwargs["logprobs"] in [0, 1], "logprobs must be 0 or 1"
+            assert sampling_parameters["logprobs"] in [0, 1], "logprobs must be 0 or 1"
 
-        if "num_samples" not in program_kwargs and "={num_samples}" in program:
-            program_kwargs["num_samples"] = 1
-        else:
-            assert (
-                program_kwargs.get("num_samples", 1) == 1
-            ), "only 1 sample is supported"
-
-        self.program_kwargs = program_kwargs
-        self.program_template = format_string(program, **program_kwargs)
-        assert (
-            '"chain_of_thought"' in self.program_template
-        ), "Program_template must contain 'chain_of_thought'"
+        self.sampling_parameters = sampling_parameters
 
         self.node_text_template = node_text_template
         assert (
             "{chain_of_thought}" in self.node_text_template
         ), "Node_text_template must contain '{chain_of_thought}'"
 
-    async def _sample_node(self, prefix: str, depth: int) -> Node:
-        result = await self._run_program(self.program_template, prefix=prefix)
-        variables = result.variables()
-        chain_of_thought = variables["chain_of_thought"]
-        stop_text = variables["stop_text"]
+    def _sample_node(self, prefix: str, depth: int) -> Node:
+        
+        sampling_parameters = self.sampling_parameters
+        @sgl.function
+        def resp(s, prefix):
+            s += prefix
+            s += sgl.gen("chain_of_thought", **sampling_parameters)
+        
+        result = resp.run(prefix=prefix)
+        
+        chain_of_thought = result["chain_of_thought"]
+        if 'matched' in result.get_meta_info("chain_of_thought")['finish_reason']:
+            stop_text = result.get_meta_info("chain_of_thought")['finish_reason']['matched']
+        else:
+            stop_text = None
 
         node_text = self.node_text_template.format(chain_of_thought=chain_of_thought)
 
@@ -103,12 +73,12 @@ class IIDExpander(NodeExpander):
             "full_text": result.text,
             "stop_text": stop_text,
         }
-
+        
         if (
-            "chain_of_thought_logprobs" in variables
-            and self.program_kwargs["logprobs"] > 0
+            "output_token_logprobs" in result.get_meta_info("chain_of_thought")
+            and self.sampling_parameters["return_logprob"]
         ):
-            logprobs: List[float] = variables["chain_of_thought_logprobs"]
+            logprobs: List[float] = [r[0] for r in result.get_meta_info("answer")["output_token_logprobs"]]
             assert isinstance(logprobs, list)
             node_num_tokens = len(logprobs)
             node_logprobs = sum(logprobs)
@@ -118,155 +88,21 @@ class IIDExpander(NodeExpander):
 
         return node
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
-        tasks = []
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+        nodes = []
         branch_factor = self.branch_factor_strategy(current_node)
         for i in range(branch_factor):
-            task = asyncio.create_task(self._sample_node(prefix, depth + 1))
-            tasks.append(task)
-
-        nodes = []
-        for task in tasks:
-            node = await task
+            node = self._sample_node(prefix, depth + 1)
             nodes.append(node)
-
+        
         return nodes
-
-
-@NodeExpander.register("iid_with_max_branching_depth")
-class IIDExpanderWithMaxBranchingDepth(NodeExpander):
-    def __init__(
-        self,
-        program: str,
-        node_text_template: str,
-        program_kwargs: JsonDict,
-        program_after_branching: str,
-        program_kwargs_after_branching: JsonDict,
-        max_branching_depth: int,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        if "logprobs" not in program_kwargs:
-            program_kwargs["logprobs"] = 0
-        else:
-            assert program_kwargs["logprobs"] in [0, 1], "logprobs must be 0 or 1"
-
-        if "num_samples" not in program_kwargs and "={num_samples}" in program:
-            program_kwargs["num_samples"] = 1
-        else:
-            assert (
-                program_kwargs.get("num_samples", 1) == 1
-            ), "only 1 sample is supported"
-
-        self.program_kwargs = program_kwargs
-        self.program_template = format_string(program, **program_kwargs)
-        assert (
-            '"chain_of_thought"' in self.program_template
-        ), "Program_template must contain 'chain_of_thought'"
-
-        # --------------------------
-        # After branching
-        # --------------------------
-
-        if "logprobs" not in program_kwargs_after_branching:
-            program_kwargs_after_branching["logprobs"] = 0
-        else:
-            assert program_kwargs_after_branching["logprobs"] in [
-                0,
-                1,
-            ], "logprobs must be 0 or 1"
-
-        if (
-            "num_samples" not in program_kwargs_after_branching
-            and "={num_samples}" in program_after_branching
-        ):
-            program_kwargs_after_branching["num_samples"] = 1
-        else:
-            assert (
-                program_kwargs_after_branching.get("num_samples", 1) == 1
-            ), "only 1 sample is supported"
-
-        self.program_kwargs_after_branching = program_kwargs_after_branching
-        self.program_after_branching = format_string(
-            program_after_branching, **program_kwargs_after_branching
-        )
-
-        self.max_branching_depth = max_branching_depth
-
-        self.node_text_template = node_text_template
-        assert (
-            "{chain_of_thought}" in self.node_text_template
-        ), "Node_text_template must contain '{chain_of_thought}'"
-
-    async def _sample_node(
-        self, prefix: str, depth: int, is_branching_done: bool = False
-    ) -> Optional[Node]:
-        program = (
-            self.program_template
-            if not is_branching_done
-            else self.program_after_branching
-        )
-        result = await self._run_program(program, prefix=prefix)
-        variables = result.variables()
-        if "chain_of_thought" not in variables:
-            logger.error("chain_of_thought not found in variables")
-            logger.error(f"variables: {variables}")
-            return None  # We will sample another node
-
-        chain_of_thought = variables["chain_of_thought"]
-        stop_text = variables.get("stop_text", None)
-
-        node_text = self.node_text_template.format(chain_of_thought=chain_of_thought)
-
-        node = {
-            "text": node_text,
-            "depth": depth,
-            "full_text": result.text,
-            "stop_text": stop_text,
-        }
-
-        return node
-
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
-        branch_factor = self.branch_factor_strategy(current_node)
-        if depth > self.max_branching_depth:
-            assert branch_factor == 1, (
-                f"branch_factor must be 1, but "
-                f"got {branch_factor}, depth: {depth}, max_branching_depth: {self.max_branching_depth}"
-            )
-
-        is_branching_done = depth > self.max_branching_depth
-
-        nodes = []
-        while len(nodes) < branch_factor:
-            tasks = []
-            for i in range(branch_factor):
-                task = asyncio.create_task(
-                    self._sample_node(prefix, depth + 1, is_branching_done)
-                )
-                tasks.append(task)
-
-            for task in tasks:
-                node = await task
-                if node is not None:
-                    nodes.append(node)
-
-            if len(nodes) < branch_factor:
-                logger.warning(
-                    f"branch_factor: {branch_factor}, but got {len(nodes)} nodes. Will sample again."
-                )
-
-        return nodes
-
 
 @NodeExpander.register("efficient_iid")
 class EfficientIIDExpander(NodeExpander):
     def __init__(
         self,
-        program: str,
         node_text_template: str,
-        program_kwargs: JsonDict,
+        sampling_parameters: JsonDict,
         num_expansion_rounds: int = 1,
         model_context_size: Optional[int] = None,
         tokenizer: Optional[Tokenizer] = None,
@@ -274,31 +110,27 @@ class EfficientIIDExpander(NodeExpander):
     ):
         super().__init__(**kwargs)
 
-        if "logprobs" in program_kwargs:
-            program_kwargs["logprobs"] = 0
+        if "logprobs" in sampling_parameters:
+            sampling_parameters["logprobs"] = 0
             logger.warning(
-                "logprobs will be set to 0 as it's not supported. Please remove logprobs from program_kwargs."
+                "logprobs will be set to 0 as it's not supported. Please remove logprobs from sampling_parameters."
             )
         else:
-            program_kwargs["logprobs"] = 0
+            sampling_parameters["logprobs"] = 0
 
-        if "num_samples" in program_kwargs:
-            program_kwargs.pop("num_samples")
+        if "num_samples" in sampling_parameters:
+            sampling_parameters.pop("num_samples")
             logger.warning(
                 "num_samples will be set by the branch_factor_strategy. "
-                "Please remove num_samples from program_kwargs."
+                "Please remove num_samples from sampling_parameters."
             )
 
-        if "stop_regex" in program_kwargs:
-            program_kwargs.pop("stop_regex")
+        if "stop_regex" in sampling_parameters:
+            sampling_parameters.pop("stop_regex")
             logger.warning("stop_regex is not supported. Please use `stop`")
 
         self.num_expansion_rounds = num_expansion_rounds
-        self.program_kwargs = program_kwargs
-        self.program_template = program
-        assert (
-            '"chain_of_thought"' in self.program_template
-        ), "Program_template must contain 'chain_of_thought'"
+        self.sampling_parameters = sampling_parameters
 
         self.node_text_template = node_text_template
         assert (
@@ -310,53 +142,45 @@ class EfficientIIDExpander(NodeExpander):
         if self.model_context_size is not None:
             assert self.tokenizer is not None, "tokenizer must be provided"
 
-    async def _sample_node(
+    def _sample_node(
         self, prefix: str, depth: int, branch_factor: int, seed: Optional[int] = None
     ) -> List[Node]:
-        program_kwargs = self.program_kwargs.copy()
+        sampling_parameters = self.sampling_parameters.copy()
 
         need_to_compute_max_tokens = (
-            "max_tokens" in self.program_template
+            "max_tokens" in self.sampling_parameters
             and self.model_context_size is not None
         )
         if need_to_compute_max_tokens:
             new_max_tokens = self._compute_max_tokens(
-                prefix, program_kwargs.get("max_tokens")
+                prefix, sampling_parameters.get("max_tokens")
             )
-            if new_max_tokens != program_kwargs.get("max_tokens"):
+            if new_max_tokens != sampling_parameters.get("max_tokens"):
                 logger.warning(
-                    f"Overriding max_tokens: {program_kwargs.get('max_tokens')} -> {new_max_tokens}"
+                    f"Overriding max_tokens: {sampling_parameters.get('max_tokens')} -> {new_max_tokens}"
                 )
             assert new_max_tokens > 0, f"new_max_tokens: {new_max_tokens}"
-            program_kwargs["max_tokens"] = new_max_tokens
-        program_kwargs["num_samples"] = branch_factor
-        if seed is not None:
-            program_kwargs["seed"] = seed
-
-        program = format_string(self.program_template, **program_kwargs)
-        result = await self._run_program(program, prefix=prefix)
-
-        variables = result.variables()
-        generated_chain_of_thoughts = variables["chain_of_thought"]
-        finish_reasons = variables["chain_of_thought_finish_reason"]
-
-        if branch_factor > 1:
-            assert len(generated_chain_of_thoughts) == branch_factor
-            assert len(finish_reasons) == branch_factor
-        else:
-            generated_chain_of_thoughts = [generated_chain_of_thoughts]
-            finish_reasons = [finish_reasons]
-
+            sampling_parameters["max_tokens"] = new_max_tokens
+        
+        @sgl.function
+        def resp(s, prefix):
+            s += prefix
+            s += sgl.gen("chain_of_thought", **sampling_parameters)
+        
+        results = []
+        for _ in range(branch_factor):
+            result = resp.run(prefix=prefix)
+            results.append(result)
+        
         nodes = []
-        for chain_of_thought, finish_reason in zip(
-            generated_chain_of_thoughts, finish_reasons
-        ):
+        for result in zip(results):
+            chain_of_thought = result["chain_of_thought"]
+            finish_reason = result.get_meta_info("chain_of_thought")["finish_reason"]['type']
+            full_text = result.text()
+            
             node_text = self.node_text_template.format(
                 chain_of_thought=chain_of_thought
             )
-            full_text = program.replace("{{prefix}}", prefix)
-            full_text = replace_gen_pattern(full_text, node_text)
-            # full_text = re.sub(r"\{\{gen(.|\s)*}}", node_text, full_text)
 
             node = {
                 "text": node_text,
@@ -366,7 +190,10 @@ class EfficientIIDExpander(NodeExpander):
                 "finish_reason": finish_reason,
             }
             nodes.append(node)
-
+        
+        if branch_factor > 1:
+            assert len(nodes) == branch_factor
+        
         return nodes
 
     def _compute_max_tokens(
@@ -378,23 +205,16 @@ class EfficientIIDExpander(NodeExpander):
             prompt_max_token if prompt_max_token is not None else float("inf"),
         )
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         branch_factor = self.branch_factor_strategy(current_node)
-        tasks = []
+        all_nodes = []
         for i in range(self.num_expansion_rounds):
             seed = self.seed
             if seed is not None:
                 seed += i
-            task = asyncio.create_task(
-                self._sample_node(prefix, depth + 1, branch_factor, seed=seed)
-            )
-            tasks.append(task)
-
-        all_nodes = []
-        for task in tasks:
-            nodes = await task
+            nodes = self._sample_node(prefix, depth + 1, branch_factor, seed=seed)
             all_nodes.extend(nodes)
-
+        
         return all_nodes
 
 
@@ -424,7 +244,7 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
     def set_answer_extractor(self, answer_extractor) -> None:
         self.answer_extractor = answer_extractor
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         assert "_request_object" in current_node
         request_obj = current_node["_request_object"]
 
@@ -433,32 +253,25 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
         num_nodes_per_round = branch_factor
         initial_num_nodes = branch_factor * self.num_expansion_rounds
 
-        async def _sample_new_nodes(num_nodes: int) -> List[Node]:
+        def _sample_new_nodes(num_nodes: int) -> List[Node]:
             i = 0
             sampled = 0
-            tasks = []
+            nodes_lst = []
             while sampled < num_nodes:
                 to_sample = min(num_nodes_per_round, num_nodes - sampled)
 
-                task = asyncio.create_task(
-                    self._sample_node(prefix, depth + 1, to_sample)
-                )
-                tasks.append(task)
-
+                nodes = self._sample_node(prefix, depth + 1, to_sample)
+                nodes_lst.extend(nodes)
+                
                 sampled += to_sample
                 i += 1
 
-            nodes_lst = []
-            for task in tasks:
-                nodes = await task
-                nodes_lst.extend(nodes)
-
             return nodes_lst
 
-        async def _compute_rewards(nodes_lst: List[Node]) -> List[float]:
+        def _compute_rewards(nodes_lst: List[Node]) -> List[float]:
             rewards = []
             for node in nodes_lst:
-                answer = await self.answer_extractor.extract_from_node(node)
+                answer = self.answer_extractor.extract_from_node(node)
                 reward = self.rollout_eval_callback(
                     query=prefix,
                     rollout=answer,
@@ -468,8 +281,8 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
                 rewards.append(reward)
             return rewards
 
-        all_nodes = await _sample_new_nodes(initial_num_nodes)
-        all_rewards = await _compute_rewards(all_nodes)
+        all_nodes = _sample_new_nodes(initial_num_nodes)
+        all_rewards = _compute_rewards(all_nodes)
 
         ci_length = self._compute_confidence_interval_length(all_rewards)
 
@@ -480,8 +293,8 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
                 f"Resampling {self.num_new_rollouts} more rollouts (curr #rolls: {len(all_nodes)}): "
                 f"ci_length: {ci_length}, threshold: {self.acceptable_ci_length_threshold}"
             )
-            new_nodes = await _sample_new_nodes(self.num_new_rollouts)
-            new_rewards = await _compute_rewards(new_nodes)
+            new_nodes = _sample_new_nodes(self.num_new_rollouts)
+            new_rewards = _compute_rewards(new_nodes)
 
             all_nodes += new_nodes
             all_rewards += new_rewards
@@ -514,8 +327,8 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
         super().__init__(**kwargs)
         self.max_branching_depth = max_branching_depth
 
-        if "stop" in self.program_kwargs:
-            program_kwarg_stop = self.program_kwargs.pop("stop")
+        if "stop" in self.sampling_parameters:
+            program_kwarg_stop = self.sampling_parameters.pop("stop")
             logger.warning(
                 f"stop will be overridden by intermediate_stop_sequence and final_stop_sequence. "
                 f"Provided stop: {program_kwarg_stop}"
@@ -524,43 +337,39 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
         self.intermediate_stop_sequence = intermediate_stop_sequence
         self.final_stop_sequence = full_response_stop_sequence
 
-    async def _sample_node(
+    def _sample_node(
         self,
         prefix: str,
         depth: int,
         branch_factor: int,
         use_intermediate_stop: bool = False,
     ) -> List[Node]:
-        program_kwargs = self.program_kwargs.copy()
-        program_kwargs["num_samples"] = branch_factor
-        program_kwargs["stop"] = (
+        sampling_parameters = self.sampling_parameters.copy()
+        sampling_parameters["stop"] = (
             self.intermediate_stop_sequence
             if use_intermediate_stop
             else self.final_stop_sequence
         )
-        program = format_string(self.program_template, **program_kwargs)
-        result = await self._run_program(program, prefix=prefix)
-        variables = result.variables()
-        generated_chain_of_thoughts = variables["chain_of_thought"]
-        finish_reasons = variables["chain_of_thought_finish_reason"]
-
-        if branch_factor > 1:
-            assert len(generated_chain_of_thoughts) == branch_factor
-            assert len(finish_reasons) == branch_factor
-        else:
-            generated_chain_of_thoughts = [generated_chain_of_thoughts]
-            finish_reasons = [finish_reasons]
-
+        
+        @sgl.function
+        def resp(s, prefix):
+            s += prefix
+            s += sgl.gen("chain_of_thought", **sampling_parameters)
+        
+        results = []
+        for _ in range(branch_factor):
+            result = resp.run(prefix=prefix)
+            results.append(result)
+        
         nodes = []
-        for chain_of_thought, finish_reason in zip(
-            generated_chain_of_thoughts, finish_reasons
-        ):
+        for result in zip(results):
+            chain_of_thought = result["chain_of_thought"]
+            finish_reason = result.get_meta_info("chain_of_thought")["finish_reason"]['type']
+            full_text = result.text()
+            
             node_text = self.node_text_template.format(
                 chain_of_thought=chain_of_thought
             )
-            full_text = program.replace("{{prefix}}", prefix)
-            full_text = replace_gen_pattern(full_text, node_text)
-            # full_text = re.sub(r"\{\{gen(.|\s)*}}", node_text, full_text)
 
             node = {
                 "text": node_text,
@@ -574,10 +383,13 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
                 "finish_reason": finish_reason,
             }
             nodes.append(node)
-
+        
+        if branch_factor > 1:
+            assert len(nodes) == branch_factor
+        
         return nodes
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         branch_factor = self.branch_factor_strategy(current_node)
         if depth > self.max_branching_depth:
             assert branch_factor == 1, (
@@ -587,39 +399,31 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
 
         use_intermediate_stop = depth <= self.max_branching_depth
 
-        tasks = []
-        for _ in range(self.num_expansion_rounds):
-            task = asyncio.create_task(
-                self._sample_node(
-                    prefix,
-                    depth + 1,
-                    branch_factor,
-                    use_intermediate_stop=use_intermediate_stop,
-                )
-            )
-            tasks.append(task)
-
         all_nodes = []
-        for task in tasks:
-            nodes = await task
+        for _ in range(self.num_expansion_rounds):
+            nodes = self._sample_node(
+                prefix,
+                depth + 1,
+                branch_factor,
+                use_intermediate_stop=use_intermediate_stop,
+            )
             all_nodes.extend(nodes)
-
+        
         return all_nodes
 
 
 @NodeExpander.register("high_low_temperature_iid")
 class HighLowTemperatureIIDExpander(IIDExpander):
     def __init__(
-        self, program: str, node_text_template: str, program_kwargs: JsonDict, **kwargs
+        self, 
+        node_text_template: str, 
+        high_temp_params: JsonDict, 
+        low_temp_params: JsonDict, 
+        **kwargs
     ):
         super(IIDExpander, self).__init__(**kwargs)
-        self.program_template = format_string(program, **program_kwargs)
-        assert (
-            '"chain_of_thought_1"' in self.program_template
-        ), "Program_template must contain 'chain_of_thought_1'"
-        assert (
-            '"chain_of_thought_2"' in self.program_template
-        ), "Program_template must contain 'chain_of_thought_2'"
+        self.high_temp_params = high_temp_params
+        self.low_temp_params = low_temp_params
 
         self.node_text_template = node_text_template
         assert (
@@ -628,22 +432,35 @@ class HighLowTemperatureIIDExpander(IIDExpander):
         assert (
             "{chain_of_thought_2}" in self.node_text_template
         ), "Node_text_template must contain '{chain_of_thought}'"
-
-    async def _sample_node(self, prefix: str, depth: int) -> Node:
-        result = await self._run_program(self.program_template, prefix=prefix)
-        variables = result.variables()
-        chain_of_thought_1 = variables["chain_of_thought_1"]
-        chain_of_thought_2 = variables["chain_of_thought_2"]
-        stop_text = variables["stop_text"]
+    
+    def _sample_node(self, prefix: str, depth: int) -> Node:
+        
+        high_temp_params = self.high_temp_params
+        low_temp_params = self.low_temp_params
+        
+        @sgl.function
+        def resp(s, prefix):
+            s += prefix
+            s += sgl.gen("chain_of_thought_1", **high_temp_params)
+            s += sgl.gen("chain_of_thought_2", **low_temp_params)
+        
+        result = resp.run(prefix=prefix)
+        chain_of_thought_1 = result["chain_of_thought_1"]
+        chain_of_thought_2 = result["chain_of_thought_2"]
+        if 'matched' in result.get_meta_info("chain_of_thought_2")['finish_reason']:
+            stop_text = result.get_meta_info("chain_of_thought_2")['finish_reason']['matched']
+        else:
+            stop_text = None
 
         node_text = self.node_text_template.format(
-            chain_of_thought_1=chain_of_thought_1, chain_of_thought_2=chain_of_thought_2
+            chain_of_thought_1=chain_of_thought_1,
+            chain_of_thought_2=chain_of_thought_2
         )
 
         node = {
             "text": node_text,
             "depth": depth,
-            "full_text": result.text,
+            "full_text": result.text(),
             "stop_text": stop_text,
         }
 
@@ -654,25 +471,24 @@ class HighLowTemperatureIIDExpander(IIDExpander):
 class BleuRejectionSamplingIIDExpander(IIDExpander):
     def __init__(
         self,
-        program: str,
         node_text_template: str,
-        program_kwargs: JsonDict,
+        sampling_parameters: JsonDict,
         bleu_acc_threshold: float,
         max_try: int,
         **kwargs,
     ):
-        super().__init__(program, node_text_template, program_kwargs, **kwargs)
+        super().__init__(node_text_template, sampling_parameters, **kwargs)
         # Use a random experiment id
         self.bleu = evaluate.load("bleu", experiment_id=str(uuid.uuid4()))
         self.bleu_acc_threshold = bleu_acc_threshold
         self.max_try = max_try
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         acc_nodes = []
         try_counter = 0
         branch_factor = self.branch_factor_strategy(current_node)
         while len(acc_nodes) < branch_factor and try_counter < self.max_try:
-            nodes = await super().expand(current_node, prefix, depth)
+            nodes = super().expand(current_node, prefix, depth)
             try_counter += 1
 
             for node in nodes:
@@ -720,8 +536,8 @@ class IIDWithDifferentSystemMessageExpander(IIDExpander):
         seed = int(os.environ.get("APP_SEED", "42"))
         self.rng = random.Random(seed)
 
-    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
-        tasks = []
+    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+        nodes = []
         branch_factor = self.branch_factor_strategy(current_node)
         assert len(self.system_messages) >= branch_factor
 
@@ -733,12 +549,7 @@ class IIDWithDifferentSystemMessageExpander(IIDExpander):
             prefix = prefix.replace(old_sys_msg, new_sys_msg)
 
             # Sample node with the new prefix
-            task = asyncio.create_task(self._sample_node(prefix, depth + 1))
-            tasks.append(task)
-
-        nodes = []
-        for task in tasks:
-            node = await task
+            node = self._sample_node(prefix, depth + 1)
             nodes.append(node)
 
         return nodes

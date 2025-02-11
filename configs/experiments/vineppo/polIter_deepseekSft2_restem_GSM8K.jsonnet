@@ -8,16 +8,13 @@ local gsm8k_inference_pipeline =
     + (import 'inference_strategies/cot.jsonnet')
     + {
         inference_strategy+: {
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 128,
-
             node_expander+: {
                 type: 'efficient_iid',
-                program_kwargs: {
+                sampling_parameters: {
                     temperature: 0.35,
                     top_p: 0.9,
                     max_tokens: 1024,
-                    stop: '"\n\n\nProblem:"',
+                    stop: "\n\n\nProblem:",
                 },
                 node_text_template: '{chain_of_thought}',
 
@@ -34,8 +31,7 @@ local gsm8k_inference_pipeline =
             },
             samples: 16,
             max_depth: 10,
-
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
+            
             no_cache: false,
             question_field: 'query',
 
@@ -61,10 +57,6 @@ local gsm8k_validation_inference_pipeline =
         reward_function+: { math_task: $.episode_generator.task },
 
         initial_model_name_or_path: hf_model_name,
-
-        inference_strategy+: {
-            guidance_llm: (import 'guidance_llms/deepseekmath7b-sft-GSM8K.jsonnet') + { api_base: 'none' },
-        },
     },
     num_iterations: total_num_iterations,
     trainer +: {

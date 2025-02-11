@@ -25,10 +25,8 @@ class MATHRestEMEpisodeGenerator(MathEpisodeGenerator):
         self._logger = logger
         self.max_response_per_question = max_response_per_question
         self.reward_threshold = reward_threshold
-        #   todo(milad): hmm, currently we are focusing on a SFT model, but we should also support base pretrained models that accept fewshot
 
-    def _generate_episodes(  # we did this weird separation of _generate_episodes and _generate_episodes_functional, so the second one can be used in analyzers when generating episodes
-        # from inference results. For example, in KLWithReferenceAnalyzer, we need to generate episodes from inference results, but the filtering based on reward and max_response_per_question should not be done there.
+    def _generate_episodes(
         self,
         inference_results: Dataset,
         iteration: int,

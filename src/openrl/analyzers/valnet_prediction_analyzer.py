@@ -329,16 +329,10 @@ class ValNetPredictionAnalyzer(Analyzer):
             log_path=results_path.parent / f"{results_path.stem}.log",
             timeout=800,
         )
-        guidance_llm_kwargs = {
-            "api_base": server_url,
-            "model": str(hf_ckpt_path_or_model),
-        }
-
+        
         # Initialize the inference strategy with the inference server URL
-        inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
-        # noinspection PyProtectedMember
-        inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
-        infer_strategy = inference_strategy_lazy.construct(
+        infer_strategy = self.inference_strategy_lazy.construct(
+            server_url=server_url,
             result_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
             seed=seed,
             cloud_logger=None,

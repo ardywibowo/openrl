@@ -9,9 +9,6 @@ local num_mc_rollouts = 9;
         value_estimation_inference_strategy+: {
             type: 'cot',
 
-            max_concurrent_programs: 512,
-            max_concurrent_generations: 512,
-
             samples: num_mc_rollouts,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
@@ -21,8 +18,6 @@ local num_mc_rollouts = 9;
                 node_key_name: 'full_text',
                 solution_prefix: '\nSolution:',
             },
-
-            guidance_llm: $.episode_generator.inference_strategy.guidance_llm,
 
             question_field: 'query',
             question_template: '{query}',
@@ -43,7 +38,7 @@ local num_mc_rollouts = 9;
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
             inference_server+: { 
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8
             },
 
@@ -53,14 +48,9 @@ local num_mc_rollouts = 9;
             max_num_requests: 1024,
 
             inference_strategy+: {
-                guidance_llm: $.episode_generator.inference_strategy.guidance_llm,
-
                 // Small model. Can afford more concurrent programs.
-                max_concurrent_programs: 128,
-                max_concurrent_generations: 128,
-
                 node_expander+: {
-                    program_kwargs+: { temperature: $.episode_generator.inference_strategy.node_expander.program_kwargs.temperature },
+                    sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.inference_strategy.node_expander.model_context_size,
                     tokenizer: $.tokenizer,
                 },
@@ -77,7 +67,7 @@ local num_mc_rollouts = 9;
             task: $.episode_generator.task,
             tokenizer: $.tokenizer,
             inference_server+: { 
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8
             },
 
@@ -89,14 +79,9 @@ local num_mc_rollouts = 9;
             num_mc_rollouts: $.episode_generator.value_estimation_inference_strategy.samples,
 
             inference_strategy+: {
-                guidance_llm: $.episode_generator.inference_strategy.guidance_llm,
-
                 // Small model. Can afford more concurrent programs.
-                max_concurrent_programs: 128,
-                max_concurrent_generations: 128,
-
                 node_expander+: {
-                    program_kwargs+: { temperature: $.episode_generator.inference_strategy.node_expander.program_kwargs.temperature },
+                    sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.inference_strategy.node_expander.model_context_size,
                     tokenizer: $.tokenizer,
                 },

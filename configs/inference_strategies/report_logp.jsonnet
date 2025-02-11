@@ -1,7 +1,7 @@
 {
     inference_strategy+: {
         node_expander+: {
-            program_kwargs+: {
+            sampling_parameters+: {
                 logprobs: 1,
             },
         },

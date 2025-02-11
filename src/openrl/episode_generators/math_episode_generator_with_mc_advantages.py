@@ -49,7 +49,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_result_path = results_root_dir / "traj_results_ds"
         traj_infer_results = try_loading_inference_results(traj_result_path)
         if traj_infer_results is None:
-            guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
+            server_configs = self.inference_server_handler.get_or_create_server_with_model(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -58,7 +58,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             traj_infer_results = self._obtain_inference_results(
                 inference_strategy_lazy=self.inference_strategy_lazy,
                 requests_ds=dataset_shard,
-                guidance_llm_kwargs=guidance_llm_kwargs,
+                server_url=server_configs,
                 results_path=traj_result_path,
                 seed=self.get_process_seed(),
             )
@@ -79,7 +79,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         unique_results = try_loading_inference_results(val_est_result_path)
         if unique_results is None:
-            guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
+            server_configs = self.inference_server_handler.get_or_create_server_with_model(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -88,7 +88,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             self._obtain_inference_results(
                 inference_strategy_lazy=self.value_inference_strategy_lazy,
                 requests_ds=unique_requests,
-                guidance_llm_kwargs=guidance_llm_kwargs,
+                server_url=server_configs,
                 results_path=results_root_dir / "value_estimation_result_ds_temp",
                 seed=self.get_process_seed() + self.distributed_state.num_processes,
             )
@@ -762,7 +762,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         self,
         inference_strategy_lazy: Lazy[InferenceStrategy],
         requests_ds: Dataset,
-        guidance_llm_kwargs: Dict,
+        server_url: Dict,
         results_path: Path,
         seed: int,
     ) -> Dataset:
@@ -773,7 +773,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         # Initialize the inference strategy with the inference server URL
         inference_strategy_lazy = copy.deepcopy(inference_strategy_lazy)
         # noinspection PyProtectedMember
-        inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
+        inference_strategy_lazy._params["server_url"].update(server_url)
         infer_strategy = inference_strategy_lazy.construct(
             result_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
             seed=seed,

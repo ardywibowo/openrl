@@ -2,7 +2,7 @@
     episode_generator+: {
         inference_server_handler+: {
             inference_server+: {
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8,
             },
         },

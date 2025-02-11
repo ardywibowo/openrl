@@ -58,7 +58,6 @@ bash main.sh
     - [`episode_generators`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/episode_generators): Manages the episode generation pipelines. The [`math_episode_generator.py`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/episode_generators/math_episode_generator.py) script is key for PPO episode generation and [`math_episode_generator_with_mc_advantages.py`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/episode_generators/math_episode_generator_with_mc_advantages.py) creates the episodes for VinePPO.
     - [`trainers`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/trainers): Contains trainer classes, with [`ppo_trainer.py`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/trainers/ppo_trainer.py) is the main PPO trainer which is shared between PPO and VinePPO.
     - [`runtime`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/runtime): Integrates components and implements training and evaluation procedures. The [`policy_iteration_runtime.py`](https://github.com/ardywibowo/openrl/tree/main/src/openrl/runtime/policy_iteration_runtime.py) script is the **starting point for running experiments.**
-- [`src/guidance`](https://github.com/ardywibowo/openrl/tree/main/src/openrl): We ship the [guidance](https://github.com/guidance-ai/guidance) module directly with the codebase. 
 
 ### Important Representative Files
 Trainers:
@@ -83,4 +82,4 @@ Tasks:
 
 ## Acknowledgement
 
-This codebase heavily takes pieces from the [VinePPO](https://github.com/ardywibowo/openrl/) repo, which takes pieces from the [guidance](https://github.com/guidance-ai/guidance), [OpenAI PRM Repo](https://github.com/openai/prm800k), and [DeepSeekMath](https://github.com/deepseek-ai/DeepSeek-Math) repos. My additional contributions minimally help to organize vastly different experiments (such as linguistic calibration, reward model training, generative verifiers etc.) as the original repo was meant for a specialized experiment setting (Math RL).
+This codebase heavily takes pieces from the [VinePPO](https://github.com/ardywibowo/openrl/) repo, [OpenAI PRM Repo](https://github.com/openai/prm800k), and [DeepSeekMath](https://github.com/deepseek-ai/DeepSeek-Math) repos. My additional contributions minimally help to organize vastly different experiments (such as linguistic calibration, reward model training, generative verifiers etc.) as the original repo was meant for a specialized experiment setting (Math RL).

@@ -351,13 +351,12 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 The directory to save the results to (this is unique for each process).
         """
         infer_result_path = results_root_dir / "results_ds"
-        guidance_llm_kwargs = self.inference_server_handler.get_or_create_server_with_model(
+        server_url = self.inference_server_handler.get_or_create_server_with_model(
             model_name_or_path, results_root_dir)
 
         # Initialize the inference strategy with the inference server URL
-        inference_strategy_lazy = copy.deepcopy(self.inference_strategy_lazy)
-        inference_strategy_lazy._params["guidance_llm"].update(guidance_llm_kwargs)
-        inference_strategy = inference_strategy_lazy.construct(
+        inference_strategy = self.inference_strategy_lazy.construct(
+            server_url=server_url,
             result_dir=results_root_dir,
             seed=self.get_process_seed(),
             cloud_logger=None,

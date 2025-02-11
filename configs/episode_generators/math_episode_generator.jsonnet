@@ -19,7 +19,7 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         
         inference_server_handler+: {
             inference_server+: {
-                type: "vllm",
+                type: "sglang",
                 swap_space: 8,
             },
             gpu_memory_utilization: 'auto',

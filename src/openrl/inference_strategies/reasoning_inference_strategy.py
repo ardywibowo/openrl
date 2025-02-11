@@ -11,15 +11,12 @@ logger = logging_utils.get_logger(__name__)
 class ReasoningInferenceStrategy(InferenceStrategy):
     def __init__(
         self,
-        server_url: str,
         question_template: str,
         question_field: str = "question",
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.question_template = question_template
-        self.server_url = server_url
-        sgl.set_default_backend(sgl.RuntimeEndpoint(server_url))
         
         self.question_field = question_field
         if self.log_level is not None:
@@ -55,8 +52,13 @@ class ReasoningInferenceStrategy(InferenceStrategy):
             format_kwargs = {key: data_instance[key] for key in question_format_keys}
             initial_prompt = self.question_template.format(**format_kwargs)
             
-            repsonse = ReasoningInferenceStrategy.gen(initial_prompt)
-            responses.append(repsonse)
+            @sgl.function
+            def resp(s, query):
+                s += query
+                s += sgl.gen("response", stop="\n\n")
+            
+            response = resp.run(initial_prompt)
+            responses.append(response)
         
         dataset = dataset.add_column(
             "response", [response["response"] for response in responses]
@@ -71,9 +73,3 @@ class ReasoningInferenceStrategy(InferenceStrategy):
         )
         
         return dataset
-        
-    @staticmethod
-    @sgl.function
-    def gen(s, query):
-        s += query
-        s += sgl.gen("response", stop="\n\n")
