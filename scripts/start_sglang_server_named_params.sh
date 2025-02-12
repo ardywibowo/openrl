@@ -19,7 +19,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 CUDA_VISIBLE_DEVICES=$GPU_IDX python -m sglang.launch_server \
-    --model "$MODEL" \
+    --model-path "$MODEL" \
     --host 0.0.0.0 \
     --port "$PORT" \
     --random-seed "$SEED" \

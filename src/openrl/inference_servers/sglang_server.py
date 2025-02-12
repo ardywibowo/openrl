@@ -10,6 +10,7 @@ from typing import Callable, Dict, Optional, Union
 
 import psutil
 import requests
+import sglang as sgl
 
 from openrl.common.logging_utils import get_logger
 from openrl.common.notebook_utils import get_repo_dir
@@ -122,15 +123,17 @@ class SGLangServer(InferenceServer):
                     with log_path.open("r") as f:
                         logger.error(f"SGLang Server log:\n{f.read()}")
                 raise RuntimeError("Server did not start within the expected time.")
-
-        server_url = f"http://localhost:{self.port}/v1"
+        
+        server_url = f"http://localhost:{self.port}"
+        endpoint = sgl.RuntimeEndpoint(server_url)
+        sgl.set_default_backend(endpoint)
         return server_url
 
     def _launch_process(self, gpu_idx, hf_ckpt_path_or_model, log_path):
         # The command arguments:
         command = (
             f"{self.script_path}"
-            f" --model {hf_ckpt_path_or_model}"
+            f" --model-path {hf_ckpt_path_or_model}"
             f" --port {self.port}"
             f" --random-seed {self.seed}"
             f" --cpu-offload-gb {self.swap_space}"
@@ -156,6 +159,20 @@ class SGLangServer(InferenceServer):
         logger.info(f"Stopping server with PID {pid}.")
         
         try:
+            # Terminate child processes
+            parent = psutil.Process(pid)
+            for child in parent.children(recursive=True):
+                try:
+                    logger.info(f"Terminating child process PID: {child.pid}")
+                    child.terminate()
+                    child.wait(timeout=5)
+                except psutil.NoSuchProcess:
+                    logger.debug(f"Child PID: {child.pid} already terminated.")
+                except psutil.TimeoutExpired:
+                    child.kill()  # Force kill if terminate fails
+                except Exception as e:
+                    logger.error(f"Error terminating child PID: {child.pid}: {e}")
+            
             # Terminate the main process
             self.process.terminate()
             self.process.wait(timeout=5)
@@ -166,3 +183,10 @@ class SGLangServer(InferenceServer):
             self.process.kill()
         except Exception as e:
             logger.error(f"Error stopping process PID: {pid}: {e}")
+
+        # Perform final cleanup
+        find_and_kill_process(self.port)
+        try:
+            subprocess.run(["pkill", "-9", "-f", f"sglang.launch_server.*port {self.port}"], check=False)
+        except Exception as e:
+            logger.error(f"Error using pkill: {e}")

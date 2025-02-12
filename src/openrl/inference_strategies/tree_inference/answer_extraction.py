@@ -10,11 +10,8 @@ logger = logging_utils.get_logger(__name__)
 
 
 class AnswerExtractor(Registrable):
-    def __init__(self, server_url: str, seed: Optional[int] = None, **kwargs):
-        self.server_url = server_url
+    def __init__(self, seed: Optional[int] = None, **kwargs):
         self.seed = seed
-        
-        sgl.set_default_backend(sgl.RuntimeEndpoint(server_url))
 
     def set_seed(self, seed: int):
         self.seed = seed

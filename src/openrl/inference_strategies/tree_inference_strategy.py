@@ -100,7 +100,7 @@ class TreeInferenceStrategy(InferenceStrategy):
         return self._concurrent_generate(dataset)
 
     def get_temp_tree_dir(self):
-        temp_tree_dir = self.result_dir / "trees"
+        temp_tree_dir = self.root_dir / "trees"
         temp_tree_dir.mkdir(parents=True, exist_ok=True)
         return temp_tree_dir
 
@@ -166,7 +166,8 @@ class TreeInferenceStrategy(InferenceStrategy):
             self.cloud_logger.log({"construction_progress": len(trees) / len(dataset)})
 
         for task in tqdm(tasks, desc="Constructing trees"):
-            instance_idx, tree = self._construct_tree(*task)
+            instance_idx, in_pr, m_d, d_i = task
+            tree = self._construct_tree(in_pr, m_d, d_i)
             trees[instance_idx] = tree
             
             if not self.no_cache:

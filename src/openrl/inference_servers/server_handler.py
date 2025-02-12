@@ -69,13 +69,13 @@ class InferenceServerHandler(Component):
             return
         
         self._server.stop_server()
-        # del self._server
-        # del self._server_configs
         
         self._server = None
         self._server_configs = None
         
-        self._cleanup_fn()
+        if self._cleanup_fn is not None:
+            self._cleanup_fn()
+        
         release_memory()
         logger.info(f"Rank {self.distributed_state.process_index} stopped inference server.")
         

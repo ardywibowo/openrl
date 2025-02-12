@@ -351,22 +351,25 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
                 The directory to save the results to (this is unique for each process).
         """
         infer_result_path = results_root_dir / "results_ds"
-        server_url = self.inference_server_handler.get_or_create_server_with_model(
+        self.inference_server_handler.get_or_create_server_with_model(
             model_name_or_path, results_root_dir)
-
+        
+        self._log_on_main(logger, f"Starting inference server on rank {self.distributed_state.process_index}")
+        
         # Initialize the inference strategy with the inference server URL
         inference_strategy = self.inference_strategy_lazy.construct(
-            server_url=server_url,
-            result_dir=results_root_dir,
-            seed=self.get_process_seed(),
-            cloud_logger=None,
             log_level=(
                 logging.WARNING
                 if not self.distributed_state.is_local_main_process
                 else None
             ),
+            root_dir=results_root_dir,
+            seed=self.get_process_seed(),
+            distributed_state=self.distributed_state,
+            cloud_logger=self.cloud_logger,
+            tokenizer=self.tokenizer
         )
-
+        
         results = inference_strategy.generate(dataset_shard)
         results.save_to_disk(str(infer_result_path))
         

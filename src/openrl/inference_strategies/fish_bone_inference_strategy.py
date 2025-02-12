@@ -214,7 +214,7 @@ class FishBoneInferenceStrategy(InferenceStrategy):
         return fish_bone_str
 
     def get_temp_fish_bone_dir(self):
-        temp_fish_bone_dirs = self.result_dir / "fish_bones"
+        temp_fish_bone_dirs = self.root_dir / "fish_bones"
         temp_fish_bone_dirs.mkdir(parents=True, exist_ok=True)
         return temp_fish_bone_dirs
 

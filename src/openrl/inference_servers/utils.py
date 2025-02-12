@@ -22,22 +22,17 @@ def ensure_executable(script_path: Union[str, Path]):
         os.chmod(script_path, os.stat(script_path).st_mode | 0o111)
 
 def find_and_kill_process(port: int):
-    for proc in psutil.process_iter(["pid", "name", "connections"]):
+    for proc in psutil.process_iter(["pid", "name"]):
         try:
-            connections = proc.info["connections"]
-            if connections is None:
-                continue
-
+            connections = proc.net_connections()
             for conn in connections:
                 if conn.laddr.port == port:
-                    # If the port matches, print process info and kill the process
-                    logger.info(
-                        f"Found process {proc.info['name']} with PID {proc.info['pid']} using port {port}"
-                    )
+                    logger.info(f"Killing process {proc.info['name']} (PID {proc.info['pid']}) using port {port}")
                     os.kill(proc.info["pid"], 9)
                     return
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
+
 
 def is_port_in_use_error(server_log: str) -> bool:
     server_log = server_log.lower()

@@ -37,10 +37,10 @@ class IIDExpander(NodeExpander):
     ):
         super().__init__(**kwargs)
 
-        if "logprobs" not in sampling_parameters:
-            sampling_parameters["logprobs"] = 0
+        if "return_logprob" not in sampling_parameters:
+            sampling_parameters["return_logprob"] = False
         else:
-            assert sampling_parameters["logprobs"] in [0, 1], "logprobs must be 0 or 1"
+            assert sampling_parameters["return_logprob"] in [False, True], "return_logprob must be False or True"
 
         self.sampling_parameters = sampling_parameters
 
@@ -110,13 +110,13 @@ class EfficientIIDExpander(NodeExpander):
     ):
         super().__init__(**kwargs)
 
-        if "logprobs" in sampling_parameters:
-            sampling_parameters["logprobs"] = 0
+        if "return_logprob" in sampling_parameters:
+            sampling_parameters["return_logprob"] = False
             logger.warning(
-                "logprobs will be set to 0 as it's not supported. Please remove logprobs from sampling_parameters."
+                "return_logprob will be set to False as it's not supported. Please remove return_logprob from sampling_parameters."
             )
         else:
-            sampling_parameters["logprobs"] = 0
+            sampling_parameters["return_logprob"] = 0
 
         if "num_samples" in sampling_parameters:
             sampling_parameters.pop("num_samples")
@@ -173,7 +173,7 @@ class EfficientIIDExpander(NodeExpander):
             results.append(result)
         
         nodes = []
-        for result in zip(results):
+        for result in results:
             chain_of_thought = result["chain_of_thought"]
             finish_reason = result.get_meta_info("chain_of_thought")["finish_reason"]['type']
             full_text = result.text()
@@ -362,7 +362,7 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
             results.append(result)
         
         nodes = []
-        for result in zip(results):
+        for result in results:
             chain_of_thought = result["chain_of_thought"]
             finish_reason = result.get_meta_info("chain_of_thought")["finish_reason"]['type']
             full_text = result.text()

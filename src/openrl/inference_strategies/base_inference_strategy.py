@@ -3,20 +3,17 @@ from pathlib import Path
 import sglang as sgl
 from datasets import Dataset
 
-from openrl.common import Registrable
+from openrl.common import Component
 
 
-class InferenceStrategy(Registrable):
-    def __init__(self, server_url: str, result_dir: Path, cloud_logger=None, log_level=None):
+class InferenceStrategy(Component):
+    def __init__(self, log_level=None, **kwargs):
         """
-        result_dir: to store the middle results to enable resuming
+        root_dir: to store the middle results to enable resuming
         """
-        self.server_url = server_url
-        self.result_dir = result_dir
-        self.cloud_logger = cloud_logger
-        self.log_level = log_level
+        super().__init__(**kwargs)
         
-        sgl.set_default_backend(sgl.RuntimeEndpoint(server_url))
+        self.log_level = log_level
 
     def generate(self, dataset: Dataset) -> Dataset:
         """
