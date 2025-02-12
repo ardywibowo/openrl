@@ -370,10 +370,8 @@ class RestEMTrainer(DeepSpeedPolicyTrainer):
                     wait_for_memory_release(target_gpu_index=this_process_device.index, threshold_mb=4096)
 
                     server_url = inference_server.start_server(
-                        hf_ckpt_path_or_model=inference_ckpt_dir,
-                        wait_for_response=True,
-                        log_path=inference_log_file,
-                        timeout=800,
+                        inference_ckpt_dir,
+                        inference_log_file
                     )
 
                     # Run the evaluation pipeline for early stopping

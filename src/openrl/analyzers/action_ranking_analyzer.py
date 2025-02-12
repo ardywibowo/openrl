@@ -69,7 +69,7 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
 
         # Start the inference server
         inference_server_log_path = ckpt_eval_root_dir / "server.log"
-        server_url = self._start_inference_server(ckpt, inference_server_log_path)
+        self._start_inference_server(ckpt, inference_server_log_path)
 
         if need_to_minimize_stored_files():
             infer_result_root = Path(tempfile.mkdtemp())
@@ -81,7 +81,6 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             requests_ds=alt_cont_reqs,
             results_path=infer_result_root / "alt_cont_inference_results",
             inference_strategy=self.alt_cont_inference_strategy_lazy,
-            server_url=server_url,
             seed=42,
         )
 
@@ -110,7 +109,6 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
             requests_ds=state_action_val_requests,
             results_path=infer_result_root / "state_action_val_inference_results",
             inference_strategy=self.inference_strategy_lazy,
-            server_url=server_url,
             seed=42,
         )
 
@@ -399,7 +397,6 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
         requests_ds: Dataset,
         results_path: Path,
         inference_strategy: Lazy[InferenceStrategy],
-        server_url: str,
         seed: int,
     ) -> Dataset:
         request_ids = requests_ds["__uuid__"]
@@ -407,7 +404,6 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
 
         # Initialize the inference strategy with the inference server URL
         infer_strategy = inference_strategy.construct(
-            server_url=server_url,
             result_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
             seed=seed,
             cloud_logger=None,
@@ -444,14 +440,10 @@ class ActionRankingAnalyzer(ValNetPredictionAnalyzer):
 
         hf_ckpt_path_or_model = checkpoint / "hf_pretrained"
         self.tokenizer.save_pretrained(hf_ckpt_path_or_model)
-        server_url = inference_server.start_server(
-            hf_ckpt_path_or_model=str(hf_ckpt_path_or_model),
-            wait_for_response=True,
-            log_path=log_path,
-            timeout=800,
+        inference_server.start_server(
+            str(hf_ckpt_path_or_model),
+            log_path,
         )
-
-        return server_url
 
     def _kill_inference_server(self) -> None:
         self.inference_server.stop_server()

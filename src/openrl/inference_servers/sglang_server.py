@@ -29,7 +29,7 @@ class SGLangServer(InferenceServer):
         self,
         hf_ckpt_path_or_model: Union[str, Path],
         log_path: Optional[Path] = None,
-    ) -> str:
+    )-> None:
         if self.server_process is not None and self.server_process.poll() is None:
             raise RuntimeError("Server is already running")
         
@@ -61,7 +61,6 @@ class SGLangServer(InferenceServer):
         sgl.set_default_backend(endpoint)
         
         self.distributed_state.wait_for_everyone()
-        return server_url
 
     def stop_server(self):
         if self.is_main_process():

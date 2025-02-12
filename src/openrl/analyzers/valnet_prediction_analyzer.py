@@ -323,17 +323,14 @@ class ValNetPredictionAnalyzer(Analyzer):
         # Make sure the inference server can seamlessly load the model
         self.tokenizer.save_pretrained(hf_ckpt_path_or_model)
 
-        server_url = inference_server.start_server(
-            hf_ckpt_path_or_model=str(hf_ckpt_path_or_model),
-            wait_for_response=True,
-            log_path=results_path.parent / f"{results_path.stem}.log",
-            timeout=800,
+        inference_server.start_server(
+            str(hf_ckpt_path_or_model),
+            results_path.parent / f"{results_path.stem}.log",
         )
         
         # Initialize the inference strategy with the inference server URL
         infer_strategy = self.inference_strategy_lazy.construct(
-            server_url=server_url,
-            result_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
+            root_dir=results_path.parent / f"{results_path.stem}.infer_strategy",
             seed=seed,
             cloud_logger=None,
         )

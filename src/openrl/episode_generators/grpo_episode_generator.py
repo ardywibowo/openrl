@@ -351,13 +351,11 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
                 The directory to save the results to (this is unique for each process).
         """
         infer_result_path = results_root_dir / "results_ds"
-        server_url = self.inference_server.start_server(
-            model_name_or_path, results_root_dir)
+        self.inference_server.start_server(model_name_or_path, results_root_dir)
 
         # Initialize the inference strategy with the inference server URL
         inference_strategy = self.inference_strategy_lazy.construct(
-            server_url=server_url,
-            result_dir=results_root_dir,
+            root_dir=results_root_dir,
             seed=self.get_process_seed(),
             cloud_logger=None,
             log_level=(

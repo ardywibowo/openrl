@@ -351,10 +351,8 @@ class PolicyIterationRuntime(DistributedRuntime):
 
             logger.info(f"Starting inference server with log file {inference_log_file}")
             server_url = inference_server.start_server(
-                hf_ckpt_path_or_model=ckpt_dir,
-                wait_for_response=True,
-                log_path=inference_log_file,
-                timeout=800,
+                ckpt_dir,
+                inference_log_file,
             )
 
             # Run inference on all pipelines
@@ -573,11 +571,9 @@ class PolicyIterationRuntime(DistributedRuntime):
         logs_dir = evaluation_root_dir / "logs"
         logs_dir.mkdir(exist_ok=True, parents=True)
 
-        server_url = inference_server.start_server(
-            hf_ckpt_path_or_model=model_ckpt,
-            wait_for_response=True,
-            log_path=logs_dir / f"inference__baseline.log",
-            timeout=800,
+        inference_server.start_server(
+            model_ckpt,
+            logs_dir / f"inference__baseline.log",
         )
 
         # Run inference on all pipelines
@@ -593,7 +589,6 @@ class PolicyIterationRuntime(DistributedRuntime):
                 Params(pipeline_cfg),
                 tokenizer=self.tokenizer,
                 seed=self.global_vars["seed"],
-                api_base_url=server_url,
                 model_name=model_ckpt,
                 metrics_prefix="baseline/",
                 enable_cloud_logging_during_inference=False,

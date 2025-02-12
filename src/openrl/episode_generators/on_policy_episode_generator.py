@@ -357,12 +357,12 @@ class OnPolicyEpisodeGenerator(EpisodeGenerator):
     
         # Initialize the inference strategy with the inference server URL
         inference_strategy = self.inference_strategy_lazy.construct(
+            root_dir=results_root_dir,
             log_level=(
                 logging.WARNING
                 if not self.distributed_state.is_local_main_process
                 else None
             ),
-            root_dir=results_root_dir,
             seed=self.get_process_seed(),
             distributed_state=self.distributed_state,
             cloud_logger=self.cloud_logger,
