@@ -16,16 +16,12 @@ local question_template = prompt_library.prompt_library.tree.question_template;
         dataset_shuffle_before_portion: true,
         dataset_sample_with_replacement: false,
         
-        inference_server_handler+: {
-            inference_server+: {
-                type: "sglang",
-                swap_space: 8,
-            },
-            gpu_memory_utilization: 'auto',
-            min_available_gpu_memory_mb: 20 * 1024,
-            wait_until_memory_release: true,
+        inference_server+: {
+            type: "sglang",
+            gpu_memory_utilization: 0.9,
+            swap_space: 8,
         },
-
+        
         reward_function: {
             type: 'model_based_reward_function',
             reward_model+: {

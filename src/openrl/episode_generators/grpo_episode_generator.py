@@ -31,7 +31,7 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
     def __init__(
         self,
         inference_strategy: Lazy[InferenceStrategy],
-        inference_server_handler: Lazy[InferenceServerHandler],
+        inference_server: Lazy[InferenceServerHandler],
         task: Task,
         initial_model_name_or_path: str,
         dataset_shuffle_on_each_iteration: bool = True,
@@ -57,7 +57,7 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         self._logger = logger
 
         self.inference_strategy_lazy = inference_strategy
-        self.inference_server_handler = inference_server_handler.construct(**kwargs)
+        self.inference_server = inference_server.construct(**kwargs)
         self.task = task
         self.dataset_split = dataset_split
         self.initial_model_name_or_path = initial_model_name_or_path
@@ -351,7 +351,7 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
                 The directory to save the results to (this is unique for each process).
         """
         infer_result_path = results_root_dir / "results_ds"
-        server_url = self.inference_server_handler.get_or_create_server_with_model(
+        server_url = self.inference_server.start_server(
             model_name_or_path, results_root_dir)
 
         # Initialize the inference strategy with the inference server URL
@@ -373,8 +373,8 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         logger.info(f"Rank {self.distributed_state.process_index} finished inference.")
         del results
         
-        self.inference_server_handler.kill_server()
-        self.inference_server_handler.compute_server_stats(results_root_dir)
+        self.inference_server.stop_server()
+        # self.inference_server_handler.compute_server_stats(results_root_dir)
         
         results = Dataset.load_from_disk(str(results_root_dir / "results_ds"))
         return results

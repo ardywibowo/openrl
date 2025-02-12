@@ -64,11 +64,9 @@ local math_validation_inference_pipeline =
 + (import 'trainers/restem_MATH.jsonnet')
 + {
     episode_generator+: {
-        inference_server_handler+: {
-            inference_server+: {
-                type: "sglang",
-                swap_space: 8,
-            },
+        inference_server+: {
+            type: "sglang",
+            swap_space: 8,
         },
         // Override the task
         type: "math_restem_episode_generator",

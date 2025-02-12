@@ -11,8 +11,7 @@ local math_task = (import 'tasks/math_inplace_no_answer_prefix.jsonnet') + {
 };
 
 local num_episodes_per_iteration = 512;
-// local num_rollouts_per_sample = 8;
-local num_rollouts_per_sample = 1;
+local num_rollouts_per_sample = 8;
 local num_dataset_samples_per_iteration = num_episodes_per_iteration / num_rollouts_per_sample;
 local total_num_iterations = 1000;
 

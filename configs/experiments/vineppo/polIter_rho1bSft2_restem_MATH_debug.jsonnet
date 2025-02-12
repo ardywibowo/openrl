@@ -79,13 +79,9 @@ local math_validation_inference_pipeline =
         dataset_portion: 0.01,
         total_num_iterations: total_num_iterations,
         
-        inference_server_handler+: {
-            inference_server+: { 
-                type: "sglang",
-                swap_space: 8, 
-                max_num_seqs: 512 
-            },
-            min_available_gpu_memory_mb: 10 * 1024,
+        inference_server+: { 
+            type: "sglang",
+            swap_space: 8, 
         },
 
         inference_strategy: {

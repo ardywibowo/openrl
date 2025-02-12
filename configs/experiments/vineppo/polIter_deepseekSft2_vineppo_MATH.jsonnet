@@ -6,12 +6,10 @@ local num_mc_rollouts = 9;
     episode_generator+: {
         type: 'math_episode_generator_w_mc_advantages',
         
-        inference_server_handler +: {
-            inference_server+: {
-                type: "sglang",
-                swap_space: 8,
-                enable_prefix_caching: true,
-            },
+        inference_server+: {
+            type: "sglang",
+            swap_space: 8,
+            enable_prefix_caching: true,
         },
 
         value_estimation_inference_strategy+: {

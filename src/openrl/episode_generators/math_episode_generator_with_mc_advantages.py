@@ -49,7 +49,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         traj_result_path = results_root_dir / "traj_results_ds"
         traj_infer_results = try_loading_inference_results(traj_result_path)
         if traj_infer_results is None:
-            server_configs = self.inference_server_handler.get_or_create_server_with_model(
+            server_configs = self.inference_server.start_server(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -79,7 +79,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
         )
         unique_results = try_loading_inference_results(val_est_result_path)
         if unique_results is None:
-            server_configs = self.inference_server_handler.get_or_create_server_with_model(
+            server_configs = self.inference_server.start_server(
                 model_name_or_path=model_name_or_path,
                 results_dir=results_root_dir
             )
@@ -114,7 +114,7 @@ class MathEpisodeGeneratorWithMCAdvantages(MathEpisodeGenerator):
             self.distributed_state.wait_for_everyone()
             unique_results = Dataset.load_from_disk(str(val_est_result_path))
         
-        self.inference_server_handler.kill_server()
+        self.inference_server.stop_server()
 
         # Distribute the value estimation results back according to the process index
         process_idx = self.distributed_state.process_index

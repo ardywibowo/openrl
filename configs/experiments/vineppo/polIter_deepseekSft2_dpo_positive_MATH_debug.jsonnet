@@ -16,11 +16,9 @@ local sampling_temperature = 0.6;
 + (import 'trainers/dpo_positive_MATH.jsonnet')
 + {
     episode_generator+: {
-        inference_server_handler+: {
-            inference_server+: {
-                type: "sglang",
-                swap_space: 8,
-            },
+        inference_server+: {
+            type: "sglang",
+            swap_space: 8,
         },
         // Override the task
         type: "math_dpo_positive_episode_generator",

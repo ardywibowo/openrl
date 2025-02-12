@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 from pathlib import Path
 from typing import Union
 
@@ -40,3 +41,21 @@ def is_port_in_use_error(server_log: str) -> bool:
         "error while attempting to bind on address" in server_log
         and "address already in use" in server_log
     )
+
+def execute_shell_command(command: str, log_file = None) -> subprocess.Popen:
+    """
+    Execute a shell command and return the process handle
+
+    Args:
+        command: Shell command as a string (can include \\ line continuations)
+    Returns:
+        subprocess.Popen: Process handle
+    """
+    # Replace \ newline with space and split
+    command = command.replace("\\\n", " ").replace("\\", " ")
+    parts = command.split()
+    
+    if log_file is not None:
+        return subprocess.Popen(parts, text=True, stdout=log_file, stderr=log_file)
+    else:
+        return subprocess.Popen(parts, text=True, stderr=subprocess.STDOUT)
