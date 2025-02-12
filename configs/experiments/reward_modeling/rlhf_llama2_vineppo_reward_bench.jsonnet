@@ -16,6 +16,10 @@ local num_mc_rollouts = 9;
 
         value_estimation_inference_strategy+: {
             type: 'cot',
+            
+            max_concurrent_programs: 512,
+            max_concurrent_generations: 512,
+            
             samples: num_mc_rollouts,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
@@ -58,6 +62,9 @@ local num_mc_rollouts = 9;
             max_num_requests: 512,
 
             inference_strategy+: {
+                max_concurrent_programs: 32,
+                max_concurrent_generations: 16,
+                
                 node_expander+: {
                     sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.max_sequence_length,
@@ -88,6 +95,8 @@ local num_mc_rollouts = 9;
             num_mc_rollouts: $.episode_generator.value_estimation_inference_strategy.samples,
 
             inference_strategy+: {
+                max_concurrent_programs: 32,
+                max_concurrent_generations: 16,
                 node_expander+: {
                     sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.max_sequence_length,

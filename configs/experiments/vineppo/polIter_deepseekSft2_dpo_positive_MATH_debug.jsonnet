@@ -42,6 +42,10 @@ local sampling_temperature = 0.6;
 
         inference_strategy: {
             type: 'cot',
+            
+            max_concurrent_programs: 128,
+            max_concurrent_generations: 64,
+            
             samples: num_rollouts_per_sample,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 

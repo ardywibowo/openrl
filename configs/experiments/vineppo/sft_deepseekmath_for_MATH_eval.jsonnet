@@ -13,6 +13,9 @@ local math_inference_pipeline =
     + (import 'inference_strategies/cot.jsonnet')
     + {
         inference_strategy+: {
+            max_concurrent_programs: 512,
+            max_concurrent_generations: 16,
+            
             node_expander+: {
                 type: 'efficient_iid',
                 sampling_parameters: {

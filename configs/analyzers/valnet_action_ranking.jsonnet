@@ -13,6 +13,9 @@ local num_alternative_actions = 5;
     inference_strategy: {
         type: 'cot',
 
+        max_concurrent_programs: 16,
+        max_concurrent_generations: 16,
+
         samples: 256 / num_expansion_rounds,
         max_depth: 100,
 

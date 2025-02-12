@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any, Dict, List, Optional
 
@@ -50,6 +51,8 @@ class TreeInferenceStrategy(InferenceStrategy):
         node_expander: NodeExpander,
         answer_extractor: AnswerExtractor,
         question_field: str = "question",
+        max_concurrent_programs: int = 128,
+        max_concurrent_generations: int = 2048,
         seed: Optional[int] = None,
         max_question_length: Optional[int] = None,
         tokenizer: Optional[Tokenizer] = None,
@@ -63,6 +66,9 @@ class TreeInferenceStrategy(InferenceStrategy):
         self.node_expander = node_expander
         self.answer_extractor = answer_extractor
         self.seed = seed
+        
+        self.max_concurrent_programs = max_concurrent_programs
+        self.max_concurrent_generations = max_concurrent_generations
         
         self.question_field = question_field
         self.no_cache = no_cache
@@ -97,7 +103,7 @@ class TreeInferenceStrategy(InferenceStrategy):
             The following columns should be always added:
             - _openrl__candidate_answers: List[str] - The candidate answers
         """
-        return self._concurrent_generate(dataset)
+        return asyncio.run(self._concurrent_generate(dataset))
 
     def get_temp_tree_dir(self):
         temp_tree_dir = self.root_dir / "trees"
@@ -107,7 +113,27 @@ class TreeInferenceStrategy(InferenceStrategy):
     def get_tree_instance_path(self, instance_idx):
         return self.get_temp_tree_dir() / f"{instance_idx}.json"
 
-    def _concurrent_generate(self, dataset: Dataset) -> Dataset:
+    async def _concurrent_generate(self, dataset: Dataset) -> Dataset:
+        # Create a semaphore to limit the number of concurrent programs
+        sem_program = asyncio.Semaphore(self.max_concurrent_programs)
+
+        # Create a semaphore to limit the number of concurrent generations
+        sem_generation = asyncio.Semaphore(self.max_concurrent_generations)
+        
+        self.node_expander.set_program_semaphore(sem_program)
+        self.answer_extractor.set_program_semaphore(sem_program)
+        
+        async def wrapper_construct_tree(tree_idx, *args, **kwargs):
+            async with sem_generation:
+                try:
+                    tr = await self._construct_tree(*args, **kwargs)
+                    return tree_idx, tr
+                except:
+                    # If there is an error, we just exit the program
+                    # as soon as possible, otherwise the program will continue
+                    # blocking the semaphore and thus blocking the entire process
+                    exit(1)
+        
         question_format_keys = []
         for column in dataset.column_names:
             if f"{{{column}}}" in self.question_template:
@@ -134,9 +160,11 @@ class TreeInferenceStrategy(InferenceStrategy):
 
         tasks = []
         trees = {}
-        for data_instance in tqdm(
+        from tqdm import tqdm as tqdm_iter
+
+        for data_instance in tqdm_iter(
             dataset,
-            desc="Creating tasks for tree construction...",
+            desc="Creating concurrent asyncio tasks for tree construction...",
         ):
             instance_idx = data_instance["__uuid__"]
 
@@ -159,17 +187,30 @@ class TreeInferenceStrategy(InferenceStrategy):
             format_kwargs = {key: data_instance[key] for key in question_format_keys}
             initial_prompt = self.question_template.format(**format_kwargs)
 
-            tasks.append((instance_idx, initial_prompt, self.max_depth, data_instance))
+            tasks.append(
+                asyncio.create_task(
+                    wrapper_construct_tree(
+                        instance_idx,
+                        initial_prompt,
+                        self.max_depth,
+                        data_instance=data_instance,
+                    )
+                )
+            )
 
         # Report the current progress to cloud logger
         if self.cloud_logger is not None:
             self.cloud_logger.log({"construction_progress": len(trees) / len(dataset)})
 
-        for task in tqdm(tasks, desc="Constructing trees"):
-            instance_idx, in_pr, m_d, d_i = task
-            tree = self._construct_tree(in_pr, m_d, d_i)
+        # Create a progress bar for the tree construction tasks
+        from tqdm.asyncio import tqdm as tqdm_asyncio
+
+        # Maintain a progress bar for the tree construction tasks.
+        # It updates whenever any of the tasks finishes.
+        for task in tqdm_asyncio.as_completed(tasks, desc="Constructing trees"):
+            instance_idx, tree = await task
             trees[instance_idx] = tree
-            
+
             if not self.no_cache:
                 tree_file_path = self.get_tree_instance_path(instance_idx)
                 with tree_file_path.open("w") as f:  # so we can resume later on
@@ -232,7 +273,7 @@ class TreeInferenceStrategy(InferenceStrategy):
         )
         return dataset
 
-    def _construct_tree(
+    async def _construct_tree(
         self,
         initial_prompt: str,
         max_depth: int,
@@ -247,37 +288,49 @@ class TreeInferenceStrategy(InferenceStrategy):
             "_request_object": data_instance,
         }
 
-        def dfs(node: Node, prefix: str, depth: int) -> None:
+        async def dfs(node: Node, prefix: str, depth: int) -> None:
             if depth >= max_depth:
                 return
-            
-            answers = []
-            
-            children = self.node_expander.expand(node, prefix, depth)
+
+            children = await self.node_expander.expand(node, prefix, depth)
             node["children"] = children
-            
+
+            # Either the child has finished (and we need to extract the answer)
+            # or we need to expand the child further.
+            # Both tasks can be done concurrently.
+            answer_extraction_tasks = []
+            children_expansion_tasks = []
             for child in children:
                 # Check if the child can be produce an answer
                 if child["stop_text"] is None:
                     # This means we have reached the end of the reasoning chain
-                    answers.append(self.answer_extractor.extract_from_node(child))
+                    answer_extraction_tasks.append(
+                        asyncio.create_task(
+                            self.answer_extractor.extract_from_node(child)
+                        )
+                    )
                 else:
                     # If the child cannot produce an answer, we continue the search
                     # by expanding the child
-                    answers.append(None)
-                    dfs(child, child["full_text"], depth + 1)
+                    answer_extraction_tasks.append(None)
+                    children_expansion_tasks.append(
+                        asyncio.create_task(dfs(child, child["full_text"], depth + 1))
+                    )
 
             # Wait for the answer extraction tasks to finish
-            for child, answer in zip(children, answers):
+            for child, answer in zip(children, answer_extraction_tasks):
                 if answer is not None:
-                    child["answer"] = answer
-        
-        dfs(tree, initial_prompt, 0)
-        
+                    child["answer"] = await answer
+
+            # Wait for the children expansion tasks to finish
+            await asyncio.gather(*children_expansion_tasks)
+
+        await dfs(tree, initial_prompt, 0)
+
         # Remove the `_data_instance` field from the tree
         # as it is not needed anymore
         tree.pop("_request_object", None)
-        
+
         return tree
 
     def _convert_tree_to_string(self, tree: Node) -> str:

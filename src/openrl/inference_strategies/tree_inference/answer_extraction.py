@@ -12,14 +12,18 @@ logger = logging_utils.get_logger(__name__)
 class AnswerExtractor(Registrable):
     def __init__(self, seed: Optional[int] = None, **kwargs):
         self.seed = seed
+        self._sem_program = None
 
     def set_seed(self, seed: int):
         self.seed = seed
+    
+    def set_program_semaphore(self, sem_program):
+        self._sem_program = sem_program
 
-    def extract_from_node(self, node: Node) -> str:
-        return self.extract(node["full_text"])
+    async def extract_from_node(self, node: Node) -> str:
+        return await self.extract(node["full_text"])
 
-    def extract(self, full_text: str) -> str:
+    async def extract(self, full_text: str) -> str:
         raise NotImplementedError()
 
 
@@ -29,7 +33,7 @@ class NextTurnAnswerExtractor(AnswerExtractor):
         super().__init__()
         self.sampling_parameters = sampling_parameters
 
-    def extract(self, full_text: str) -> str:
+    async def extract(self, full_text: str) -> str:
         
         sampling_parameters = self.sampling_parameters
         @sgl.function
@@ -38,15 +42,19 @@ class NextTurnAnswerExtractor(AnswerExtractor):
             s += sgl.gen("final_answer", **sampling_parameters)
         
         result = resp.run(prefix=full_text)
+        
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     result = resp.run(prefix=full_text)
         final_answer = result["final_answer"]
-
+        
         return final_answer
 
 
 @AnswerExtractor.register("next_chat_turn_code")
 class NextTurnCodeAnswerExtractor(NextTurnAnswerExtractor):
-    def extract(self, full_text: str) -> str:
-        final_answer = super().extract(full_text)
+    async def extract(self, full_text: str) -> str:
+        final_answer = await super().extract(full_text)
         final_answer = "```\ndef " + final_answer
         return final_answer
 
@@ -57,7 +65,7 @@ class NextTurnABCDAnswerExtractor(AnswerExtractor):
         super().__init__()
         self.sampling_parameters = sampling_parameters
 
-    def extract(self, full_text: str) -> str:
+    async def extract(self, full_text: str) -> str:
         sampling_parameters = self.sampling_parameters
         @sgl.function
         def resp(s, prefix):
@@ -65,6 +73,11 @@ class NextTurnABCDAnswerExtractor(AnswerExtractor):
             s += sgl.select("final_answer", ["A", "B", "C", "D"], **sampling_parameters)
         
         result = resp.run(prefix=full_text)
+        
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     result = resp.run(prefix=full_text)
+        
         final_answer = result["final_answer"]
         
         # make sure just one answer is in the final answer
@@ -86,7 +99,7 @@ class IdentityAnswerExtractor(AnswerExtractor):
         super().__init__(**kwargs)
         self.node_key_name = node_key_name
 
-    def extract_from_node(self, node: Node) -> str:
+    async def extract_from_node(self, node: Node) -> str:
         return node[self.node_key_name]
 
 
@@ -99,8 +112,8 @@ class IdentityWithSolutionPrefix(IdentityAnswerExtractor):
         self.solution_prefix = solution_prefix
         self.end_of_turn_token = end_of_turn_token
 
-    def extract_from_node(self, node: Node) -> str:
-        answer = super().extract_from_node(node)
+    async def extract_from_node(self, node: Node) -> str:
+        answer = await super().extract_from_node(node)
         parts = answer.split(self.solution_prefix)
         assert (
             len(parts) >= 2

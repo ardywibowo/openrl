@@ -4,6 +4,7 @@ import re
 import uuid
 from typing import Callable, List, Optional
 
+import asyncio
 import evaluate
 import numpy as np
 import sglang as sgl
@@ -23,10 +24,15 @@ class NodeExpander(Registrable):
         self.branch_factor_strategy = branch_factor_strategy
         self.seed = seed
 
+        self._sem_program = None
+
+    def set_program_semaphore(self, sem_program):
+        self._sem_program = sem_program
+
     def set_seed(self, seed):
         self.seed = seed
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         raise NotImplementedError()
 
 
@@ -49,7 +55,7 @@ class IIDExpander(NodeExpander):
             "{chain_of_thought}" in self.node_text_template
         ), "Node_text_template must contain '{chain_of_thought}'"
 
-    def _sample_node(self, prefix: str, depth: int) -> Node:
+    async def _sample_node(self, prefix: str, depth: int) -> Node:
         
         sampling_parameters = self.sampling_parameters
         @sgl.function
@@ -59,14 +65,18 @@ class IIDExpander(NodeExpander):
         
         result = resp.run(prefix=prefix)
         
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     result = resp.run(prefix=prefix)
+        
         chain_of_thought = result["chain_of_thought"]
         if 'matched' in result.get_meta_info("chain_of_thought")['finish_reason']:
             stop_text = result.get_meta_info("chain_of_thought")['finish_reason']['matched']
         else:
             stop_text = None
-
+        
         node_text = self.node_text_template.format(chain_of_thought=chain_of_thought)
-
+        
         node = {
             "text": node_text,
             "depth": depth,
@@ -82,19 +92,24 @@ class IIDExpander(NodeExpander):
             assert isinstance(logprobs, list)
             node_num_tokens = len(logprobs)
             node_logprobs = sum(logprobs)
-
+            
             node["sum_logprobs"] = node_logprobs
             node["num_tokens"] = node_num_tokens
-
+        
         return node
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
-        nodes = []
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+        tasks = []
         branch_factor = self.branch_factor_strategy(current_node)
         for i in range(branch_factor):
-            node = self._sample_node(prefix, depth + 1)
+            task = asyncio.create_task(self._sample_node(prefix, depth + 1))
+            tasks.append(task)
+
+        nodes = []
+        for task in tasks:
+            node = await task
             nodes.append(node)
-        
+
         return nodes
 
 @NodeExpander.register("efficient_iid")
@@ -142,7 +157,7 @@ class EfficientIIDExpander(NodeExpander):
         if self.model_context_size is not None:
             assert self.tokenizer is not None, "tokenizer must be provided"
 
-    def _sample_node(
+    async def _sample_node(
         self, prefix: str, depth: int, branch_factor: int, seed: Optional[int] = None
     ) -> List[Node]:
         sampling_parameters = self.sampling_parameters.copy()
@@ -167,10 +182,11 @@ class EfficientIIDExpander(NodeExpander):
             s += prefix
             s += sgl.gen("chain_of_thought", **sampling_parameters)
         
-        results = []
-        for _ in range(branch_factor):
-            result = resp.run(prefix=prefix)
-            results.append(result)
+        results = resp.run_batch([{"prefix": prefix} for _ in range(branch_factor)])
+        
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     results = resp.run_batch([{"prefix": prefix} for _ in range(branch_factor)])
         
         nodes = []
         for result in results:
@@ -205,16 +221,23 @@ class EfficientIIDExpander(NodeExpander):
             prompt_max_token if prompt_max_token is not None else float("inf"),
         )
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         branch_factor = self.branch_factor_strategy(current_node)
-        all_nodes = []
+        tasks = []
         for i in range(self.num_expansion_rounds):
             seed = self.seed
             if seed is not None:
                 seed += i
-            nodes = self._sample_node(prefix, depth + 1, branch_factor, seed=seed)
+            task = asyncio.create_task(
+                self._sample_node(prefix, depth + 1, branch_factor, seed=seed)
+            )
+            tasks.append(task)
+
+        all_nodes = []
+        for task in tasks:
+            nodes = await task
             all_nodes.extend(nodes)
-        
+
         return all_nodes
 
 
@@ -244,7 +267,7 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
     def set_answer_extractor(self, answer_extractor) -> None:
         self.answer_extractor = answer_extractor
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         assert "_request_object" in current_node
         request_obj = current_node["_request_object"]
 
@@ -253,25 +276,32 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
         num_nodes_per_round = branch_factor
         initial_num_nodes = branch_factor * self.num_expansion_rounds
 
-        def _sample_new_nodes(num_nodes: int) -> List[Node]:
+        async def _sample_new_nodes(num_nodes: int) -> List[Node]:
             i = 0
             sampled = 0
-            nodes_lst = []
+            tasks = []
             while sampled < num_nodes:
                 to_sample = min(num_nodes_per_round, num_nodes - sampled)
 
-                nodes = self._sample_node(prefix, depth + 1, to_sample)
-                nodes_lst.extend(nodes)
-                
+                task = asyncio.create_task(
+                    self._sample_node(prefix, depth + 1, to_sample)
+                )
+                tasks.append(task)
+
                 sampled += to_sample
                 i += 1
 
+            nodes_lst = []
+            for task in tasks:
+                nodes = await task
+                nodes_lst.extend(nodes)
+
             return nodes_lst
 
-        def _compute_rewards(nodes_lst: List[Node]) -> List[float]:
+        async def _compute_rewards(nodes_lst: List[Node]) -> List[float]:
             rewards = []
             for node in nodes_lst:
-                answer = self.answer_extractor.extract_from_node(node)
+                answer = await self.answer_extractor.extract_from_node(node)
                 reward = self.rollout_eval_callback(
                     query=prefix,
                     rollout=answer,
@@ -281,8 +311,8 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
                 rewards.append(reward)
             return rewards
 
-        all_nodes = _sample_new_nodes(initial_num_nodes)
-        all_rewards = _compute_rewards(all_nodes)
+        all_nodes = await _sample_new_nodes(initial_num_nodes)
+        all_rewards = await _compute_rewards(all_nodes)
 
         ci_length = self._compute_confidence_interval_length(all_rewards)
 
@@ -293,8 +323,8 @@ class ConfidenceIntervalAwareEfficientIIDExpander(EfficientIIDExpander):
                 f"Resampling {self.num_new_rollouts} more rollouts (curr #rolls: {len(all_nodes)}): "
                 f"ci_length: {ci_length}, threshold: {self.acceptable_ci_length_threshold}"
             )
-            new_nodes = _sample_new_nodes(self.num_new_rollouts)
-            new_rewards = _compute_rewards(new_nodes)
+            new_nodes = await _sample_new_nodes(self.num_new_rollouts)
+            new_rewards = await _compute_rewards(new_nodes)
 
             all_nodes += new_nodes
             all_rewards += new_rewards
@@ -337,7 +367,7 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
         self.intermediate_stop_sequence = intermediate_stop_sequence
         self.final_stop_sequence = full_response_stop_sequence
 
-    def _sample_node(
+    async def _sample_node(
         self,
         prefix: str,
         depth: int,
@@ -356,10 +386,11 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
             s += prefix
             s += sgl.gen("chain_of_thought", **sampling_parameters)
         
-        results = []
-        for _ in range(branch_factor):
-            result = resp.run(prefix=prefix)
-            results.append(result)
+        results = resp.run_batch([{"prefix": prefix} for _ in range(branch_factor)])
+        
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     results = resp.run_batch([{"prefix": prefix} for _ in range(branch_factor)])
         
         nodes = []
         for result in results:
@@ -389,7 +420,7 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
         
         return nodes
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         branch_factor = self.branch_factor_strategy(current_node)
         if depth > self.max_branching_depth:
             assert branch_factor == 1, (
@@ -399,16 +430,23 @@ class EfficientIIDExpanderForTree(EfficientIIDExpander):
 
         use_intermediate_stop = depth <= self.max_branching_depth
 
-        all_nodes = []
+        tasks = []
         for _ in range(self.num_expansion_rounds):
-            nodes = self._sample_node(
-                prefix,
-                depth + 1,
-                branch_factor,
-                use_intermediate_stop=use_intermediate_stop,
+            task = asyncio.create_task(
+                self._sample_node(
+                    prefix,
+                    depth + 1,
+                    branch_factor,
+                    use_intermediate_stop=use_intermediate_stop,
+                )
             )
+            tasks.append(task)
+
+        all_nodes = []
+        for task in tasks:
+            nodes = await task
             all_nodes.extend(nodes)
-        
+
         return all_nodes
 
 
@@ -433,7 +471,7 @@ class HighLowTemperatureIIDExpander(IIDExpander):
             "{chain_of_thought_2}" in self.node_text_template
         ), "Node_text_template must contain '{chain_of_thought}'"
     
-    def _sample_node(self, prefix: str, depth: int) -> Node:
+    async def _sample_node(self, prefix: str, depth: int) -> Node:
         
         high_temp_params = self.high_temp_params
         low_temp_params = self.low_temp_params
@@ -445,6 +483,11 @@ class HighLowTemperatureIIDExpander(IIDExpander):
             s += sgl.gen("chain_of_thought_2", **low_temp_params)
         
         result = resp.run(prefix=prefix)
+        
+        # assert self._sem_program is not None
+        # async with self._sem_program:
+        #     result = resp.run(prefix=prefix)
+        
         chain_of_thought_1 = result["chain_of_thought_1"]
         chain_of_thought_2 = result["chain_of_thought_2"]
         if 'matched' in result.get_meta_info("chain_of_thought_2")['finish_reason']:
@@ -483,12 +526,12 @@ class BleuRejectionSamplingIIDExpander(IIDExpander):
         self.bleu_acc_threshold = bleu_acc_threshold
         self.max_try = max_try
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
         acc_nodes = []
         try_counter = 0
         branch_factor = self.branch_factor_strategy(current_node)
         while len(acc_nodes) < branch_factor and try_counter < self.max_try:
-            nodes = super().expand(current_node, prefix, depth)
+            nodes = await super().expand(current_node, prefix, depth)
             try_counter += 1
 
             for node in nodes:
@@ -536,8 +579,8 @@ class IIDWithDifferentSystemMessageExpander(IIDExpander):
         seed = int(os.environ.get("APP_SEED", "42"))
         self.rng = random.Random(seed)
 
-    def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
-        nodes = []
+    async def expand(self, current_node: Node, prefix: str, depth: int) -> List[Node]:
+        tasks = []
         branch_factor = self.branch_factor_strategy(current_node)
         assert len(self.system_messages) >= branch_factor
 
@@ -549,7 +592,12 @@ class IIDWithDifferentSystemMessageExpander(IIDExpander):
             prefix = prefix.replace(old_sys_msg, new_sys_msg)
 
             # Sample node with the new prefix
-            node = self._sample_node(prefix, depth + 1)
+            task = asyncio.create_task(self._sample_node(prefix, depth + 1))
+            tasks.append(task)
+
+        nodes = []
+        for task in tasks:
+            node = await task
             nodes.append(node)
 
         return nodes

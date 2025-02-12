@@ -35,6 +35,10 @@ local sampling_temperature = 0.6;
 
         inference_strategy: {
             type: 'cot',
+            
+            max_concurrent_programs: 128,
+            max_concurrent_generations: 64,
+            
             samples: num_rollouts_per_sample,
             max_depth: 100,  // Deprecated parameter. Doesn't do anything.
 
@@ -101,6 +105,9 @@ local sampling_temperature = 0.6;
             max_num_requests: 512,
 
             inference_strategy+: {
+                max_concurrent_programs: 32,
+                max_concurrent_generations: 16,
+                
                 node_expander+: {
                     sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.max_sequence_length,
@@ -129,6 +136,9 @@ local sampling_temperature = 0.6;
             append_bos_to_query: $.episode_generator.append_bos_to_query,
 
             inference_strategy+: {
+                max_concurrent_programs: 32,
+                max_concurrent_generations: 16,
+                
                 node_expander+: {
                     sampling_parameters+: { temperature: $.episode_generator.inference_strategy.node_expander.sampling_parameters.temperature },
                     model_context_size: $.episode_generator.inference_strategy.node_expander.model_context_size,
