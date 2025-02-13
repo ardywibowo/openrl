@@ -44,6 +44,7 @@ class SGLangServer(InferenceServer):
                 f" --port {self.port}" 
                 f" --host 0.0.0.0"
                 f" --dp-size {num_devices}"
+                f" --dtype bfloat16"
             )
             
             log_path = log_path / "server.log"

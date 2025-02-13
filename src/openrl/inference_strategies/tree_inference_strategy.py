@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 from typing import Any, Dict, List, Optional
 
@@ -108,6 +109,7 @@ class TreeInferenceStrategy(InferenceStrategy):
         return self.get_temp_tree_dir() / f"{instance_idx}.json"
 
     def _concurrent_generate(self, dataset: Dataset) -> Dataset:
+        # Identify the columns to format the question.
         question_format_keys = []
         for column in dataset.column_names:
             if f"{{{column}}}" in self.question_template:
@@ -118,6 +120,7 @@ class TreeInferenceStrategy(InferenceStrategy):
             f"Available format keys: {question_format_keys}"
         )
 
+        # Optionally filter out examples with questions that are too long.
         if self.max_question_length is not None:
             dataset = self._filter_out_long_questions(dataset, question_format_keys)
 
@@ -134,10 +137,9 @@ class TreeInferenceStrategy(InferenceStrategy):
 
         tasks = []
         trees = {}
-        for data_instance in tqdm(
-            dataset,
-            desc="Creating tasks for tree construction...",
-        ):
+
+        # Create tasks for tree construction (and load cached trees if available).
+        for data_instance in tqdm(dataset, desc="Creating tasks for tree construction..."):
             instance_idx = data_instance["__uuid__"]
 
             if not self.no_cache:
@@ -148,52 +150,61 @@ class TreeInferenceStrategy(InferenceStrategy):
                         logger.info(f"Loaded tree from {tree_file_path}")
                     assert len(tree) > 0
                     trees[instance_idx] = tree
-                    # Skip if the tree is already constructed
+                    # Skip task creation if the tree is already constructed.
                     continue
                 except FileNotFoundError:
                     pass
                 except Exception as e:
-                    # If the file exists but is corrupted, we log the error and re-construct the tree
                     logger.error(f"Error loading tree from {tree_file_path}: {e}")
 
             format_kwargs = {key: data_instance[key] for key in question_format_keys}
             initial_prompt = self.question_template.format(**format_kwargs)
-
             tasks.append((instance_idx, initial_prompt, self.max_depth, data_instance))
 
-        # Report the current progress to cloud logger
+        # Report the current progress to the cloud logger.
         if self.cloud_logger is not None:
             self.cloud_logger.log({"construction_progress": len(trees) / len(dataset)})
 
-        for task in tqdm(tasks, desc="Constructing trees"):
+        # Helper function to process a single task.
+        def process_task(task):
             instance_idx, in_pr, m_d, d_i = task
             tree = self._construct_tree(in_pr, m_d, d_i)
-            trees[instance_idx] = tree
-            
+            # Save the constructed tree to disk if caching is enabled.
             if not self.no_cache:
                 tree_file_path = self.get_tree_instance_path(instance_idx)
-                with tree_file_path.open("w") as f:  # so we can resume later on
+                with tree_file_path.open("w") as f:
                     json.dump(tree, f)
+            return instance_idx, tree
 
-            if self.cloud_logger is not None:
-                self.cloud_logger.log(
-                    {"construction_progress": len(trees) / len(dataset)}
-                )
+        # Process tree construction in parallel using a thread pool.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+            # Submit all tasks.
+            futures = {executor.submit(process_task, task): task for task in tasks}
 
-        trees = [
-            trees[idx] for idx in dataset["__uuid__"]
-        ]  # change order back to original
-        assert len(trees) == len(
-            dataset
-        ), f"len(trees)={len(trees)}, len(dataset)={len(dataset)}"
+            # As each task completes, update our trees and (optionally) log progress.
+            for future in tqdm(
+                concurrent.futures.as_completed(futures),
+                total=len(futures),
+                desc="Constructing trees"
+            ):
+                instance_idx, tree = future.result()
+                trees[instance_idx] = tree
+                if self.cloud_logger is not None:
+                    self.cloud_logger.log({"construction_progress": len(trees) / len(dataset)})
 
-        # Utility function to create a dataset
+        # Reorder trees so that their order matches the original dataset.
+        trees_list = [trees[idx] for idx in dataset["__uuid__"]]
+        assert len(trees_list) == len(dataset), (
+            f"len(trees)={len(trees_list)}, len(dataset)={len(dataset)}"
+        )
+
+        # Utility function to create a new column from the extracted trees.
         def create_column(column_name, extraction_method):
             return Dataset.from_dict(
-                {column_name: [extraction_method(tree) for tree in trees]}
+                {column_name: [extraction_method(tree) for tree in trees_list]}
             )[column_name]
 
-        # Add new columns to the dataset
+        # Add new columns to the dataset.
         dataset = dataset.add_column(
             TREE_COLNAME, create_column("tree", self._convert_tree_to_string)
         )

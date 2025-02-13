@@ -281,3 +281,4 @@ configs/.wandb_api_key.json
 /cached_inference_results/
 private/
 tmp.ipynb
+temp_ppo_checkpoints/
