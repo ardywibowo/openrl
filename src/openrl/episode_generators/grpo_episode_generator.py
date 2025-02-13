@@ -34,17 +34,9 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         inference_server: Lazy[InferenceServerHandler],
         task: Task,
         initial_model_name_or_path: str,
-        dataset_shuffle_on_each_iteration: bool = True,
-        dataset_shuffle_before_portion: bool = True,
         dataset_split: str = "train",
-        dataset_portion: Optional[float] = None,
         dataset_num_samples_per_iteration: Optional[int] = None,
-        dataset_sample_with_replacement: bool = True,
-        dataset_initial_size: Optional[int] = None,
-        total_num_iterations: Optional[int] = None,
         temp_dir_root: Optional[str] = None,
-        fill_missing_episodes: bool = False,
-        max_question_length: Optional[int] = None,
         question_template: Optional[str] = None,
         save_generations_every_n_iteration: Optional[int] = None,
         **kwargs,
@@ -61,31 +53,10 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         self.task = task
         self.dataset_split = dataset_split
         self.initial_model_name_or_path = initial_model_name_or_path
-        self.dataset_portion = dataset_portion
         self.dataset_num_samples_per_iteration = dataset_num_samples_per_iteration
-        self.dataset_shuffle_before_portion = dataset_shuffle_before_portion
-        self.dataset_shuffle_on_each_iteration = dataset_shuffle_on_each_iteration
-        self.dataset_sample_with_replacement = dataset_sample_with_replacement
-        self.dataset_initial_size = dataset_initial_size
-        self.total_num_iterations = total_num_iterations
-        self.fill_missing_episodes = fill_missing_episodes
-        self.max_question_length = max_question_length
         self.question_template = question_template
         self.save_generations_every_n_iteration = save_generations_every_n_iteration
-
-        if (
-            self.dataset_portion is not None
-            and self.dataset_num_samples_per_iteration is not None
-        ):
-            raise ValueError(
-                "Only one of `dataset_portion` and `dataset_num_samples_per_iteration` can be set."
-            )
-        if (
-            self.dataset_portion is None
-            and self.dataset_num_samples_per_iteration is None
-        ):
-            self.dataset_portion = 1.0
-
+        
         if temp_dir_root is None:
             self.temp_dir_root = self.root_dir / "temp_episodes"
             self._log_on_main(logger, f"Using default temp_dir_root: {self.temp_dir_root}")
@@ -98,63 +69,8 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
     def _init_orig_ds(self):
         ds = self.task.get_datasets(self.dataset_split)
         self._log_on_main(logger, f"Initial Dataset Size: {len(ds)}")
-        ds = self._filter_init_dataset(ds)
-
-        self.initial_ds_after_filter_size = len(ds)
-
+        
         self._orig_ds = ds
-        if self.dataset_initial_size is not None:
-            self._orig_ds = self._orig_ds.shuffle(self.seed).select(
-                range(self.dataset_initial_size)
-            )
-            self._log_on_main(
-                logger,
-                f"Dataset Size after initial selection: {len(self._orig_ds)}"
-            )
-
-        if not self.dataset_sample_with_replacement:
-            # Create the dataset once on all processes
-            self._log_on_main(
-                logger,
-                f"Creating and caching dataset for once on all processes."
-            )
-            if self.total_num_iterations is None:
-                if self.dataset_shuffle_on_each_iteration:
-                    self._orig_ds = self._orig_ds.shuffle(seed=self.seed)
-            else:
-                # Compute the number of dataset repeats needed to cover all iterations
-                dataset_size = len(self._orig_ds)
-                samples_per_iteration = (
-                    self.dataset_num_samples_per_iteration
-                    if self.dataset_num_samples_per_iteration is not None
-                    else int(dataset_size * self.dataset_portion)
-                )
-
-                num_repeats = (
-                    self.total_num_iterations * samples_per_iteration // dataset_size
-                )
-                num_repeats += 1
-                if num_repeats > 1:
-                    self._log_on_main(
-                        logger,
-                        f"Repeating the dataset {num_repeats} times to cover all iterations."
-                    )
-                    if self.distributed_state.is_main_process:
-                        new_ds = concatenate_datasets(
-                            [
-                                self._orig_ds.shuffle(seed=self.seed + i)
-                                for i in range(num_repeats)
-                            ]
-                        )
-                        new_ds.save_to_disk(self.temp_dir_root / "cached_dataset")
-                        del new_ds
-                        release_memory()
-                    self._orig_ds = Dataset.load_from_disk(
-                        str(self.temp_dir_root / "cached_dataset")
-                    )
-                else:
-                    if self.dataset_shuffle_on_each_iteration:
-                        self._orig_ds = self._orig_ds.shuffle(seed=self.seed)
 
     def generate(
         self, iteration: Optional[int] = None, latest_policy_path: Optional[Path] = None
@@ -183,42 +99,14 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         if self._orig_ds is None:
             with self.distributed_state.main_process_first():
                 self._init_orig_ds()
-
+        
         dataset = self._orig_ds
-        if self.dataset_num_samples_per_iteration is not None:
-            num_samples = self.dataset_num_samples_per_iteration
-        else:
-            num_samples = int(self.initial_ds_after_filter_size * self.dataset_portion)
-            self._log_on_main(
-                logger,
-                f"Using {num_samples} samples for each iteration based on the dataset portion.")
+        num_samples = self.dataset_num_samples_per_iteration
         assert num_samples <= len(dataset)
-
-        if not self.dataset_sample_with_replacement:
-            # Split the dataset into portions and select one portion based on the iteration
-            samples_per_iteration = (
-                self.dataset_num_samples_per_iteration
-                if self.dataset_num_samples_per_iteration is not None
-                else int(self.initial_ds_after_filter_size * self.dataset_portion)
-            )
-            start_idx = samples_per_iteration * iteration
-            end_idx = samples_per_iteration * iteration + num_samples
-            dataset = dataset.select(range(start_idx, end_idx))
-        else:
-            # Shuffle the dataset so that the same dataset is not used in every iteration
-            do_shuffle = (
-                self.dataset_shuffle_on_each_iteration
-                or self.dataset_shuffle_before_portion
-            )
-            if do_shuffle:
-                dataset = dataset.shuffle(seed=self.seed + iteration)
-
-            dataset = dataset.select(range(num_samples))
-
-        self._log_on_main(
-            logger,
-            f"Dataset Size(portion={self.dataset_portion}): {len(dataset)}"
-        )
+        
+        dataset = dataset.shuffle(seed=self.seed + iteration)
+        dataset = dataset.select(range(num_samples))
+        
         self._log_on_main(
             logger,
             f"Dataset Examples: "
@@ -260,9 +148,9 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         )
         self.distributed_state.wait_for_everyone()
         self._metrics["timing/episode_generation/inference"] = time.time() - t0
-
+        
         logger.info(f"Process {process_index} finished inference.")
-
+        
         # Generate episodes from inference results. Each process generates its own episodes.
         t0 = time.time()
         episodes_lst = [
@@ -276,46 +164,20 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         del episodes_ds_shard
         release_memory()
         self._metrics["timing/episode_generation/inferResult_to_episodes"] = time.time() - t0
-
+        
         # Concatenate all episodes shards
         self.distributed_state.wait_for_everyone()
         if self.is_main_process():
             shard_paths = list((temp_dir / f"episodes").glob("shard_*"))
             shard_paths.sort(key=lambda x: int(x.name.split("shard_")[-1]))
-
             merged = concatenate_datasets(
                 [Dataset.load_from_disk(str(p)) for p in shard_paths]
             )
-            if self.num_episodes_per_iteration is None:
-                pass
-            elif len(merged) > self.num_episodes_per_iteration:
-                merged = merged.shuffle(seed=self.seed + iteration)
-                merged = merged.select(range(self.num_episodes_per_iteration))
-            elif len(merged) < self.num_episodes_per_iteration:
-                if self.fill_missing_episodes:
-                    # Fill the missing episodes by repeating the existing ones
-                    logger.warning(
-                        f"Number of episodes generated ({len(merged)}) is less than "
-                        f"num_episodes_per_iteration ({self.num_episodes_per_iteration}). "
-                        f"Repeating the existing episodes."
-                    )
-                    num_repeats = self.num_episodes_per_iteration // len(merged) + 1
-                    merged = concatenate_datasets([merged] * num_repeats)
-                    merged = merged.shuffle(seed=self.seed + iteration)
-                    merged = merged.select(range(self.num_episodes_per_iteration))
-                    logs = {f"episodes_metric/fill_missing_episodes": num_repeats}
-                    
-                    self._metrics.update(logs)
-                else:
-                    raise ValueError(
-                        f"Number of episodes generated ({len(merged)}) is less than "
-                        f"num_episodes_per_iteration ({self.num_episodes_per_iteration})"
-                    )
-
+            
             merged.save_to_disk(temp_dir / "episodes" / "merged")
             del merged
             release_memory()
-
+        
         self.distributed_state.wait_for_everyone()
         episodes = Dataset.load_from_disk(str(temp_dir / "episodes" / "merged"))
 
@@ -385,17 +247,16 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
     def _save_generations_to_cloud(self, generations_dir: Path, iteration: int):
         if self.cloud_logger is None or not self.is_main_process():
             return
-
+        
         if self.save_generations_every_n_iteration is None:
             # Saving generations is disabled
             return
-
+        
         if iteration != 0 and iteration % self.save_generations_every_n_iteration != 0:
             # We only save generations every n iterations and the first iteration
             return
-
+        
         temp_dir = Path(tempfile.mkdtemp())
-
         generations = temp_dir / f"iteration__{iteration:04d}.zip"
         shutil.make_archive(
             str(generations.with_suffix("")),
@@ -404,44 +265,10 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         )
         self.cloud_logger.save(str(generations.absolute()), policy="now")
 
-    def _filter_init_dataset(self, dataset: Dataset) -> Dataset:
-        if self.max_question_length is None:
-            return dataset
-
-        tokenizer = self.tokenizer
-        question_template = self.question_template
-        max_question_length = self.max_question_length
-        question_format_keys = []
-        for column in dataset.column_names:
-            if f"{{{column}}}" in self.question_template:
-                question_format_keys.append(column)
-
-        if len(question_format_keys) == 0:
-            raise ValueError(
-                "No columns found in the question template. "
-                "Please add the column names in the question template."
-            )
-
-        def filter_out_long_questions(example):
-            format_kwargs = {key: example[key] for key in question_format_keys}
-            prompt = question_template.format(**format_kwargs)
-            tokens = tokenizer(prompt).input_ids
-            return len(tokens) <= max_question_length
-
-        length_before = len(dataset)
-        dataset = dataset.filter(
-            filter_out_long_questions, num_proc=4, desc="Filtering long questions"
-        )
-        self._log_on_main(
-            logger,
-            f"Filtered out {length_before - len(dataset)} long questions from {length_before} questions."
-        )
-        return dataset
-
     def _clean_up_temp_dir(self, temp_dir: Path) -> None:
         if not self.is_main_process():
             return
-
+        
         try:
             # Remove all input_dataset__* directories
             for p in temp_dir.glob("input_dataset__*"):

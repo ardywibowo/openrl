@@ -177,7 +177,8 @@ class TreeInferenceStrategy(InferenceStrategy):
             return instance_idx, tree
 
         # Process tree construction in parallel using a thread pool.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
+        NUM_WORKERS = 32
+        with concurrent.futures.ThreadPoolExecutor(max_workers=NUM_WORKERS) as executor:
             # Submit all tasks.
             futures = {executor.submit(process_task, task): task for task in tasks}
 
