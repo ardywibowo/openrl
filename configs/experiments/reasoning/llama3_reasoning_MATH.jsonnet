@@ -9,9 +9,9 @@ local num_episodes_per_iteration = 512;
 local num_rollouts_per_sample = 8;
 local num_dataset_samples_per_iteration = num_episodes_per_iteration / num_rollouts_per_sample;
 local total_num_iterations = 1000;
-local sampling_temperature = 0.6;
+local sampling_temperature = 0.8;
 
-local ds_stage_2_w_cpu_optimizer = (import '../deepspeed/zero_2.jsonnet') + {
+local ds_stage_2_w_cpu_optimizer = (import 'deepspeed/zero_2.jsonnet') + {
     zero_optimization+: {
         offload_optimizer+: {
             device: 'cpu',
@@ -20,14 +20,14 @@ local ds_stage_2_w_cpu_optimizer = (import '../deepspeed/zero_2.jsonnet') + {
     },
 };
 
-local math_task = (import '../tasks/math.jsonnet') + {
+local math_task = (import 'tasks/math.jsonnet') + {
     answer_prefix: null,
     inplace_split_solution: true,
     prepend_in_context_few_shot: false,
     ensure_fit_in_context_size: false,
 };
 
-local question_template = 'A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think>
+local system_prompt = 'A conversation between User and Assistant. The user asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer. The reasoning process and answer are enclosed within <think> </think> and <answer> </answer> tags, respectively, i.e., <think> reasoning process here </think>
 <answer> answer here </answer>
 ';
 
@@ -50,18 +50,15 @@ local question_template = 'A conversation between User and Assistant. The user a
         answer_prefix: null,
         
         initial_model_name_or_path: hf_model_name,
-
-        dataset_sample_with_replacement: true,
         dataset_num_samples_per_iteration: num_dataset_samples_per_iteration,
-        total_num_iterations: total_num_iterations,
-
-        // max_sequence_length: 2499,  // Increase the max_seq_len since the model context size is 4096
-
+        
         save_generations_every_n_iteration: 50,
-
+        append_bos_to_query: true,
+        append_eos_to_response: true,
+        
         inference_strategy: {
             type: 'reasoning',
-            samples: num_rollouts_per_sample,
+            num_samples: num_rollouts_per_sample,
             
             sampling_parameters+: {
                 temperature: sampling_temperature,
@@ -69,17 +66,10 @@ local question_template = 'A conversation between User and Assistant. The user a
                 max_tokens: 1024,
                 stop: "\n\n\nProblem:",
             },
-            question_field: 'query',
-            question_template: question_template,
+            system_prompt: system_prompt,
+            question_template: "{query}",
             tokenizer: tokenizer,
         },
-        
-
-        append_bos_to_query: true,
-        append_eos_to_response: true,
-
-        dataset_shuffle_on_each_iteration: true,
-        dataset_shuffle_before_portion: true,
         
         inference_server+: {
             type: "sglang",
@@ -88,22 +78,12 @@ local question_template = 'A conversation between User and Assistant. The user a
         },
 
         reward_function: {
-            type: 'math_reward_function',
-            penalize_unfinished_response: true,
-            unfinished_response_penalty: 0.0,
-            math_task: math_task,
+            type: 'simple_math_reward_function',
         },
-
-        // max_sequence_length: 2048,
-        max_sequence_length: 4096,
-        max_question_length: 1512,
-        question_template: question_template,
-
-        fill_missing_episodes: true,
     },
     
     trainer+: {
-        type: 'ppo',
+        type: 'grpo',
         
         // To prevent OOM errors
         report_entropy: false,
@@ -136,8 +116,6 @@ local question_template = 'A conversation between User and Assistant. The user a
         
         params+: {
             temperature: sampling_temperature,
-            use_score_norm: false,
-            use_score_scaling: false,
             
             adap_kl_ctrl: false,
             init_kl_coef: 0.0001,
@@ -151,9 +129,6 @@ local question_template = 'A conversation between User and Assistant. The user a
 
             cliprange: 0.2,
             cliprange_value: 0.2,
-
-            whiten_rewards: false,
-            whiten_advantages: true,
         },
 
         general_training_args: {

@@ -9,3 +9,4 @@ from .math_restem_episode_generator import MATHRestEMEpisodeGenerator
 from .math_dpo_positive_episode_generator import MATHDPOPositiveEpisodeGenerator
 from .binary_classification_episode_generator import BinaryClassificationEpisodeGenerator
 from .reward_modeling_episode_generator import RewardModelingEpisodeGenerator
+from .grpo_episode_generator import GRPOEpisodeGenerator

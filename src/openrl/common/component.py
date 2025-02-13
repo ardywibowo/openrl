@@ -38,7 +38,6 @@ class Component(Registrable):
         
         if kwargs:
             self._log_on_main(logger, f"Unused arguments: {kwargs}")
-        
 
     def get_process_seed(self) -> int:
         return self.seed + self._iteration * self.distributed_state.num_processes + self.distributed_state.process_index

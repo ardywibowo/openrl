@@ -1,13 +1,14 @@
 import copy
 import json
 import logging
+import math
 import random
 import shutil
 import tempfile
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from accelerate.utils import release_memory
 from datasets import Dataset, concatenate_datasets
@@ -16,28 +17,29 @@ from openrl.common import Lazy
 from openrl.common.logging_utils import get_logger
 from openrl.episode_generators.base_episode_generator import EpisodeGenerator
 from openrl.episodes import Episode
-from openrl.inference_servers import InferenceServerHandler
+from openrl.inference_servers import InferenceServer
 from openrl.inference_strategies.base_inference_strategy import \
     InferenceStrategy
+from openrl.reward_functions import RewardFunction
 from openrl.tasks.base_task import Task
 
 logger = get_logger(__name__)
 
-
+@EpisodeGenerator.register("grpo_episode_generator")
 class GRPOEpisodeGenerator(EpisodeGenerator):
     can_precompute_episodes: bool = False
     support_distributed: bool = True
 
     def __init__(
         self,
-        inference_strategy: Lazy[InferenceStrategy],
-        inference_server: Lazy[InferenceServerHandler],
         task: Task,
         initial_model_name_or_path: str,
+        inference_server: Lazy[InferenceServer],
+        inference_strategy: Lazy[InferenceStrategy],
+        reward_function: Lazy[RewardFunction],
         dataset_split: str = "train",
         dataset_num_samples_per_iteration: Optional[int] = None,
         temp_dir_root: Optional[str] = None,
-        question_template: Optional[str] = None,
         save_generations_every_n_iteration: Optional[int] = None,
         **kwargs,
     ):
@@ -54,8 +56,15 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         self.dataset_split = dataset_split
         self.initial_model_name_or_path = initial_model_name_or_path
         self.dataset_num_samples_per_iteration = dataset_num_samples_per_iteration
-        self.question_template = question_template
         self.save_generations_every_n_iteration = save_generations_every_n_iteration
+        
+        self.reward_function = reward_function.construct(
+            seed=self.seed,
+            distributed_state=self.distributed_state,
+            cloud_logger=self.cloud_logger,
+            root_dir= self.root_dir,
+            tokenizer=self.tokenizer
+        )
         
         if temp_dir_root is None:
             self.temp_dir_root = self.root_dir / "temp_episodes"
@@ -92,9 +101,8 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
             iteration = 0
         
         self.init(iteration)
-
         process_index = self.distributed_state.process_index
-
+        
         # Prepare the dataset on all processes
         if self._orig_ds is None:
             with self.distributed_state.main_process_first():
@@ -141,29 +149,19 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
             hf_ckpt_path_or_model = str(latest_policy_path)
         
         t0 = time.time()
-        infer_results = self._run_inference(
+        episodes_ds_shard = self._run_inference(
             dataset_shard=dataset,
             model_name_or_path=hf_ckpt_path_or_model,
             results_root_dir=results_dir
         )
         self.distributed_state.wait_for_everyone()
-        self._metrics["timing/episode_generation/inference"] = time.time() - t0
-        
-        logger.info(f"Process {process_index} finished inference.")
-        
-        # Generate episodes from inference results. Each process generates its own episodes.
-        t0 = time.time()
-        episodes_lst = [
-            self._convert_to_dict(e)
-            for e in self._generate_episodes(infer_results, iteration)
-        ]
-        episodes_ds_shard = Dataset.from_list(episodes_lst)
         episodes_ds_shard.save_to_disk(
             temp_dir / f"episodes" / f"shard_{process_index:02d}"
         )
         del episodes_ds_shard
+        self._metrics["timing/episode_generation/inference"] = time.time() - t0
+        logger.info(f"Process {process_index} finished inference.")
         release_memory()
-        self._metrics["timing/episode_generation/inferResult_to_episodes"] = time.time() - t0
         
         # Concatenate all episodes shards
         self.distributed_state.wait_for_everyone()
@@ -180,9 +178,8 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         
         self.distributed_state.wait_for_everyone()
         episodes = Dataset.load_from_disk(str(temp_dir / "episodes" / "merged"))
-
         see_memory_usage("After generating episodes", force=True)
-
+        
         self._save_generations_to_cloud(temp_dir, iteration)
         self._clean_up_temp_dir(temp_dir)
         self.distributed_state.wait_for_everyone()
@@ -228,6 +225,7 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         )
 
         results = inference_strategy.generate(dataset_shard)
+        results = self._generate_episodes(results)
         results.save_to_disk(str(infer_result_path))
         
         logger.info(f"Rank {self.distributed_state.process_index} finished inference.")
@@ -238,11 +236,123 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         
         results = Dataset.load_from_disk(str(results_root_dir / "results_ds"))
         return results
+    
+    def _generate_episodes(self, results: Dataset) -> Dataset:
+        """
+        Compute rewards and advantages for each response group in the given HuggingFace Dataset.
+        For each row in `results` (which should include "response_group" and "full_text_group" columns),
+        this function:
+        1. Extracts the query text by removing the candidate response from the full text.
+        2. Computes a reward for each candidate by calling:
+                reward = self.reward_function(response, data_instance)
+        3. Computes the group-average reward.
+        4. Computes each candidate's advantage as (reward - group_avg).
+        Finally, it flattens the data so that each row in the returned Dataset corresponds to a 
+        single candidate response with its computed reward and advantage, and further converts 
+        it into an Episode.
+        """
+        
+        def compute_rewards(row: dict) -> dict:
+            full_texts = row["full_text_group"]
+            responses = row["response_group"]
+            
+            # Extract queries by removing the trailing response from each full text.
+            queries = [
+                full_text[:-len(response)] if response else full_text
+                for full_text, response in zip(full_texts, responses)
+            ]
+            rewards = [self.reward_function(response, row) for response in responses]
+            group_avg = sum(rewards) / len(rewards) if rewards else 0.0
+            advantages = [reward - group_avg for reward in rewards]
+            
+            # Compute standard deviation.
+            std = math.sqrt(sum((r - group_avg) ** 2 for r in rewards) / len(rewards)) if rewards else 1.0
+            advantages = [(reward - group_avg) / std for reward in rewards]
+            
+            # Save computed lists in the row for later flattening.
+            row["flat_queries"] = queries
+            row["flat_response"] = responses
+            row["flat_reward"] = rewards
+            row["flat_advantage"] = advantages
+            return row
+        
+        def flatten_row(row: dict) -> list:
+            # For each candidate in the row, produce a separate dictionary.
+            return [
+                {
+                    "query": query,
+                    "response": response,
+                    "reward": reward,
+                    "advantage": advantage,
+                }
+                for query, response, reward, advantage in zip(
+                    row["flat_queries"],
+                    row["flat_response"],
+                    row["flat_reward"],
+                    row["flat_advantage"],
+                )
+            ]
+        
+        def process_episode(row: dict) -> dict:
+            query_token_ids, response_token_ids = self._tokenize(row["query"], row["response"])
+            episode = Episode(
+                query_token_ids=query_token_ids,
+                response_token_ids=response_token_ids,
+                query_text=row["query"],
+                response_text=row["response"],
+                scores=row["reward"],
+                advantages=row["advantage"],
+            )
+            return self._convert_to_dict(episode)
+        
+        # Step 1: Compute rewards and advantages per row (non-batched).
+        results = results.map(compute_rewards, num_proc=8, batched=False)
+        
+        # Step 2: Flatten the dataset by iterating over each row.
+        flat_list = []
+        for row in results:
+            flat_list.extend(flatten_row(row))
+        flattened_dataset = Dataset.from_list(flat_list)
+        
+        # Step 3: Process each flattened example into an Episode.
+        episodes = flattened_dataset.map(process_episode, num_proc=8)
+        
+        return episodes
 
-    def _generate_episodes(
-        self, inference_results: Dataset, iteration: int
-    ) -> List[Union[Dict[str, Any], Episode]]:
-        raise NotImplementedError
+    def _tokenize(self, query_text: str, response_text: str) -> Tuple[List[int], List[int]]:
+        """
+        Tokenize the concatenated query and response texts.
+        Uses the tokenizer's offset mapping to determine the split between query and response.
+        Optionally appends BOS to the query and EOS to the response if configured.
+        """
+        episode_text: str = f"{query_text}{response_text}"
+        episode_encoding = self.tokenizer(
+            episode_text,
+            add_special_tokens=False,  # We will add BOS and EOS tokens later.
+            return_offsets_mapping=True,
+        )
+        
+        token_ids: List[int] = episode_encoding["input_ids"]
+        offsets: List[Tuple[int, int]] = episode_encoding["offset_mapping"]
+        
+        # Determine the index where the response begins.
+        response_start_index = next(
+            (i for i, (start, _) in enumerate(offsets) if start >= len(query_text)),
+            None
+        )
+        if response_start_index is None:
+            raise ValueError("Could not determine the start of the response based on query length.")
+        
+        query_token_ids: List[int] = token_ids[:response_start_index]
+        response_token_ids: List[int] = token_ids[response_start_index:]
+        
+        if self._should_append_bos_to_query():
+            query_token_ids = [self.tokenizer.bos_token_id] + query_token_ids
+        
+        if self._should_append_eos_to_response():
+            response_token_ids = response_token_ids + [self.tokenizer.eos_token_id]
+        
+        return query_token_ids, response_token_ids
 
     def _save_generations_to_cloud(self, generations_dir: Path, iteration: int):
         if self.cloud_logger is None or not self.is_main_process():

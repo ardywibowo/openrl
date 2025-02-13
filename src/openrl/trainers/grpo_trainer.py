@@ -25,7 +25,7 @@ from transformers.trainer_pt_utils import get_model_param_count
 
 from openrl.common import JsonDict, Lazy
 from openrl.common.deepspeed_utils import (prepare_data_loader_for_inference,
-                                             prepare_data_loader_for_training)
+                                           prepare_data_loader_for_training)
 from openrl.common.logging_utils import get_logger
 from openrl.common.py_utils import need_to_minimize_stored_files
 from openrl.common.wandb_utils import get_repo_dir
@@ -33,15 +33,14 @@ from openrl.models.base_model import Model
 from openrl.trainers.arguments import TrainingArguments
 from openrl.trainers.base_trainer import Trainer
 from openrl.trainers.data_collator import (COLUMN_ACTOR_SHIFTED_LOGPS,
-                                             COLUMN_REF_SHIFTED_LOGPS,
-                                             COLUMN_VALUES, PPODataCollator)
+                                           COLUMN_REF_SHIFTED_LOGPS,
+                                           COLUMN_VALUES, PPODataCollator)
 from openrl.trainers.deepspeed_policy_trainer import DeepSpeedPolicyTrainer
 from openrl.trainers.policy_trainer import Checkpoint
 from openrl.trainers.utils import (DeepSpeedRunningMoments,
-                                     close_to_zero_percentage,
-                                     entropy_from_logits, masked_mean,
-                                     masked_rescale_by_std, masked_var,
-                                     masked_whiten, monitor_tensor_anomalies)
+                                   close_to_zero_percentage,
+                                   entropy_from_logits, masked_mean,
+                                   masked_var, monitor_tensor_anomalies)
 
 from .ppo_trainer import AdaptiveKLController, FixedKLController
 
@@ -81,18 +80,6 @@ class GRPOHParams:
             Number of steps between comparison of the current reward with the best seen so far.
         ratio_threshold (float):
             Skip mini-batches with high PPO ratios that can cause loss spikes.
-        use_score_scaling (bool):
-            Use score scaling.
-        use_score_norm (bool):
-            Use score normalization. Only applicable if use_score_scaling is True.
-        score_clip (Optional[float]):
-            Score clipping.
-        whiten_advantages (bool):
-            Whiten the advantages before computing the actor loss.
-        grayen_advantages (bool):
-            Only change the scale of the advantages to have a std of 1.
-        whiten_rewards (bool):
-            Whiten the rewards before compute advantages.
         temperature (float):
             The temperature used for sampling.
     """
@@ -117,19 +104,10 @@ class GRPOHParams:
     target_kl: float = 1
     compare_steps: int = 1
     ratio_threshold: float = 10.0
-    use_score_scaling: bool = False
-    use_score_norm: bool = False
-    score_clip: Optional[float] = None
-    whiten_advantages: bool = True
-    grayen_advantages: bool = False
-    whiten_rewards: bool = False
     temperature: float = 1.0
     
     def __post_init__(self):
         assert self.temperature > 0, "Temperature should be positive."
-        assert not (
-            self.whiten_advantages and self.grayen_advantages
-        ), "Either whiten or grayen advantages, not both."
 
 
 @Trainer.register("grpo")
@@ -407,9 +385,6 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             actor (DeepSpeedEngine):
                 The actor model to train.
         """
-        # Step 1: Rescale and clip the scores if needed
-        episodes = self._rescale_and_clip_scores(episodes)
-
         kls = self._log_episodes_metrics(episodes)
 
         # Step 2: The actual PPO training loop
@@ -555,55 +530,7 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
         inputs: Dict[str, torch.Tensor],
         actor: DeepSpeedEngine
     ) -> Dict[str, Union[float, torch.Tensor]]:
-        # To better understand the alignment of inputs, logits, logps, and labels,
-        # we provide a detailed explanation below.
-        # -----------------------------------------------------------------------------------------------------------
-        # Consider the sequence: "<s> q1 q2 a b c </s>", where "<s> q1 q2" forms the prompt, and "a b c </s>"
-        # the response, with `prompt_len = 3` and `response_len = 4`. Additionally, we include a padding token at
-        # the end for the sake of generality.
-        #
-        # Here is the inputs dictionary setup:
-        # Inputs:
-        # [     <s>           q1           q2           a            b            c           </s>         <p>   ]
-        # Attn Mask:
-        # [       1            1            1           1            1            1              1           0   ]
-        # Labels:
-        # [    -100         -100         -100        ID_a         ID_b         ID_c        ID_</s>        -100   ]
-        # >>> seq_len = torch.sum(attn_mask) = 7
-        #
-        # Feeding the Inputs+Attn Mask, the model outputs logits for next tokens in the sequence:
-        # Logits:
-        # [  p(.|<s>)      p(.|q1)      p(.|q2)      p(.|a)       p(.|b)       p(.|c)      p(.|</s>)    p(.|<p>)]
-        #
-        # We exclude the nonsensical last logit (predicting beyond </s>). Also, to obtain the logprobs of next
-        # ground-truth token, we shift the labels by 1 to the left:
-        #
-        # Valid Logits:
-        # [  p(.|<s>)      p(.|q1)      p(.|q2)      p(.|a)       p(.|b)       p(.|c)      p(.|</s>)  ]
-        # Shifted Labels:
-        # [     -100         -100         ID_a        ID_b         ID_c        ID_</s>         -100   ]
-        # Shifted Labels Mask (aka Action Mask), i.e. shifted_labels != -100, highlighting valid token-preds/actions:
-        # [        0            0            1           1            1            1              0   ]
-        # Aligning them to obtain logprobs (lp) of predicting the next token (or lp of action):
-        # [    lp(q1)       lp(q2)        lp(a)       lp(b)        lp(c)      lp(</s>)       lp(<p>)  ]
-        #
-        #
-        # Applying the labels mask gives us logprobs of predicting the valid response tokens (aka actions):
-        # [     -inf          inf         lp(a)       lp(b)        lp(c)      lp(</s>)         -inf   ]
-        # Rewriting the original shifted inputs (for clarity). These are the states we care about:
-        # [      <s>           q1           q2           a            b            c           </s>   ]
-        # In this example, with S=[<s>;q1;q2] as the state and A=a, we compute lp(A|S) = log(p(a|<s>;q1;q2)) = lp(a)
-        #
-        # Note that the values are also computed for the entire sequence, but similar to inputs, we ignore
-        # the last one since it nonsensical (i.e. V(</s>) is not used).
-        # Valid Values:
-        # [    V(<s>)        V(q1)        V(q2)        V(a)         V(b)         V(c)        V(</s>)  ]
-        # Applying the action mask:
-        # [     -inf         -inf         V(q2)        V(a)         V(b)         V(c)          -inf   ]
-        #
-        # >>> logits_seq_len = logps_seq_len = valid_values_len = seq_len - 1 = 6
         
-        # noinspection DuplicatedCode
         inputs = {k: v.to(actor.device) for k, v in inputs.items()}
         
         input_ids = inputs["input_ids"]  # Shape: (batch_size, max_seq_len)
@@ -628,50 +555,22 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
                 shifted_ref_logprobs = inputs[COLUMN_REF_SHIFTED_LOGPS]
             else:
                 shifted_ref_logprobs = None
-
-            # The following are computed for the actions. Thus, they are of shape (batch_size, max_seq_len-1)
-            # Shape of `rewards`: (batch_size, max_seq_len-1)
-            # Shape of `non_score_reward`: (batch_size, max_seq_len-1)
-            # Shape of `kls`: (batch_size, max_seq_len-1)
-            # rewards, non_score_rewards, kls = self._compute_rewards(
-            #     scores, shifted_actor_logprobs, shifted_ref_logprobs, attention_mask
-            # )
-
-            # The `advantages` is computed for the actions. That's why they are of shape (batch_size, max_seq_len-1)
-            # Shape of `advantages`: (batch_size, max_seq_len-1)
-
-            # The following are computed for the valid states (everything but last state).
-            # Shape of `valid_values`: (batch_size, max_seq_len-1)
-            # Shape of `returns`: (batch_size, max_seq_len-1)
+            
             assert "advantages" in inputs
             precomputed_advantages = inputs["advantages"]  # Shape: (batch_size, max_seq_len)
-
+            
             # Shift the advantages to left to match the actions
             advantages = precomputed_advantages[:, 1:]  # Shape: (batch_size, max_seq_len-1)
-            if self.grpo_hparams.whiten_advantages:
-                advantages = masked_whiten(
-                    advantages,
-                    shifted_labels_mask,
-                    distributed=True,
-                    unbiased_variance=True,
-                )
-            elif self.grpo_hparams.grayen_advantages:
-                advantages = masked_rescale_by_std(
-                    advantages,
-                    shifted_labels_mask,
-                    distributed=True,
-                    unbiased_variance=True,
-                )
             returns = None
-
+            
             assert advantages.shape == shifted_actor_logprobs.shape
-
+        
         model_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels,
         }
-
+        
         # Step 2: Compute the policy/actor loss
         actor_loss, is_skipped, actor_metrics, approx_ref_kl = self._compute_actor_loss(
             actor,
@@ -887,72 +786,6 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
 
         return rewards.detach(), non_score_rewards.detach(), kl
 
-    def _compute_advantages(
-        self,
-        valid_values: torch.FloatTensor,
-        rewards: torch.FloatTensor,
-        shifted_labels_mask: torch.LongTensor,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
-        """
-        Compute the advantages from the values and rewards.
-
-        Args:
-            valid_values (`torch.FloatTensor`):
-                The values of the responses, shape (`batch_size`, `max_seq_len-1`)
-            rewards (`torch.FloatTensor`):
-                The rewards of the responses, shape (`batch_size`, `max_seq_len-1`)
-            shifted_labels_mask (`torch.LongTensor`):
-                Left Shifted by 1 Mask for the labels (i.e. actions), shape (`batch_size`, `max_seq_len-1`)
-
-        Returns:
-            `torch.FloatTensor`: The advantages of the responses, shape (`batch_size`, `max_seq_len-1`)
-            `torch.FloatTensor`: The returns of the responses, shape (`batch_size`, `max_seq_len-1`)
-        """
-        lastgaelam = 0
-        advantages_reversed = []
-        actions_seq_len = rewards.shape[-1]
-
-        # Make sure invalid rewards are masked
-        rewards *= shifted_labels_mask
-
-        if self.grpo_hparams.whiten_rewards:
-            rewards = masked_whiten(
-                rewards, shifted_labels_mask, shift_mean=False, distributed=True
-            )
-
-        for t in reversed(range(actions_seq_len)):
-            next_state_values = (
-                valid_values[:, t + 1] if t < (actions_seq_len - 1) else 0.0
-            )
-            delta = (
-                rewards[:, t]
-                + self.grpo_hparams.gamma * next_state_values
-                - valid_values[:, t]
-            )
-            lastgaelam = (
-                delta + self.grpo_hparams.gamma * self.grpo_hparams.lam * lastgaelam
-            )
-            advantages_reversed.append(lastgaelam)
-        advantages = torch.stack(advantages_reversed[::-1]).transpose(0, 1)
-        assert advantages.shape == rewards.shape
-
-        returns = advantages + valid_values
-        if self.grpo_hparams.whiten_advantages:
-            advantages = masked_whiten(
-                advantages,
-                shifted_labels_mask,
-                distributed=True,
-                unbiased_variance=True,
-            )
-        elif self.grpo_hparams.grayen_advantages:
-            advantages = masked_rescale_by_std(
-                advantages,
-                shifted_labels_mask,
-                distributed=True,
-                unbiased_variance=True,
-            )
-        return advantages.detach(), returns.detach()
-
     def _compute_kl_penalty(
         self,
         logprob: Union[torch.FloatTensor, np.ndarray],
@@ -1020,46 +853,6 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             ).sum(-1)
 
         raise NotImplementedError
-
-    def _rescale_and_clip_scores(self, episodes: Dataset) -> Dataset:
-        bias_correction = None
-        scale_factor = None
-        if self.grpo_hparams.use_score_scaling:
-            assert "scores" in episodes.column_names, "Scores should be provided."
-            scores = torch.tensor(episodes["scores"], dtype=torch.float32)
-            scores_mean, scores_std = self.running_scores.update(scores)
-            scale_factor = scores_std + torch.finfo(scores.dtype).eps
-            if self.grpo_hparams.use_score_norm:  # todo: weird name, right?
-                bias_correction = -scores_mean
-
-        clip = self.grpo_hparams.score_clip
-
-        def transform_reward(example: Dict[str, Any]) -> Dict[str, Any]:
-            score = example["scores"]
-            if bias_correction is not None:
-                score = score + bias_correction
-            if scale_factor is not None:
-                score = score / scale_factor
-
-            if clip is not None:
-                score = torch.clip(torch.tensor(score).float(), -clip, clip)
-
-            return {
-                "scores": (
-                    score.item() if isinstance(score, torch.Tensor) else float(score)
-                )
-            }
-
-        if "scores" in episodes.column_names and any(
-            val is not None for val in [bias_correction, scale_factor, clip]
-        ):
-            episodes = episodes.map(
-                transform_reward,
-                num_proc=self.distributed_state.num_processes,
-                desc="Rescaling and clipping scores (if needed)",
-            )
-
-        return episodes
 
     log_keys_to_store_in_running_metrics = [
         "_num_participating_tokens",
