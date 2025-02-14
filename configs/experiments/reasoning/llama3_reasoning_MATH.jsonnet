@@ -5,10 +5,10 @@ local tokenizer = {
     hf_model_name: hf_model_name,
 };
 
-local num_episodes_per_iteration = 512;
-local num_rollouts_per_sample = 8;
+local num_episodes_per_iteration = 16384;
+local num_rollouts_per_sample = 64;
 local num_dataset_samples_per_iteration = num_episodes_per_iteration / num_rollouts_per_sample;
-local total_num_iterations = 1000;
+local total_num_iterations = 16;
 local sampling_temperature = 0.8;
 
 local ds_stage_2_w_cpu_optimizer = (import 'deepspeed/zero_2.jsonnet') + {
@@ -39,7 +39,7 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
 
     num_iterations: total_num_iterations,
     num_episodes_per_iteration: num_episodes_per_iteration,
-    episodes_cloud_log_steps: 50,
+    episodes_cloud_log_steps: 64,
     
     episode_generator+: {
         type: 'grpo_episode_generator',
@@ -52,7 +52,7 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
         initial_model_name_or_path: hf_model_name,
         dataset_num_samples_per_iteration: num_dataset_samples_per_iteration,
         
-        save_generations_every_n_iteration: 50,
+        save_generations_every_n_iteration: 64,
         append_bos_to_query: true,
         append_eos_to_response: true,
         
@@ -63,7 +63,7 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
             sampling_parameters+: {
                 temperature: sampling_temperature,
                 top_p: 0.9,
-                max_tokens: 1024,
+                max_tokens: 2048,
                 stop: "\n\n\nProblem:",
             },
             system_prompt: system_prompt,
@@ -73,8 +73,7 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
         
         inference_server+: {
             type: "sglang",
-            gpu_memory_utilization: 0.9,
-            swap_space: 8,
+            gpu_memory_utilization: 0.9
         },
 
         reward_function: {
@@ -87,6 +86,10 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
         
         // To prevent OOM errors
         report_entropy: false,
+        num_epochs_per_iteration: 8,
+        cache_deepspeed_engines: true,
+        move_reference_model_to_cpu: true,
+        save_hf_critic_checkpoint: true,
 
         actor_model+: {
             type: 'pretrained_causal_lm',
@@ -132,13 +135,13 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
         },
 
         general_training_args: {
-            save_steps: 30,
-            checkpoint_keep_steps: 60,
+            save_steps: 32,
+            checkpoint_keep_steps: 64,
             target_train_batch_size: 64,
 
             per_device_train_batch_size: 8,
 
-            learning_rate: 1e-6,
+            learning_rate: 1e-5,
             weight_decay: 0.00,
             warmup_ratio: 0.03,
 
@@ -153,10 +156,5 @@ local system_prompt = 'A conversation between User and Assistant. The user asks 
             logging_steps: 1,
             seed: std.parseInt(std.extVar('APP_SEED')),
         },
-
-        num_epochs_per_iteration: 2,
-        cache_deepspeed_engines: true,
-        move_reference_model_to_cpu: true,
-        save_hf_critic_checkpoint: true,
     },
 }

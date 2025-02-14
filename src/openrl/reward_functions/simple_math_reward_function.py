@@ -13,10 +13,10 @@ class SimpleMATHRewardFunction(RewardFunction):
 
     def __call__(
         self, 
-        response: Dict[str, Any], 
+        response: str, 
         dataset_instance: Dict[str, Any]
     ) -> Tuple[float, bool]:
-        pred_answer = response['response']
+        pred_answer = response
         gold_answer = dataset_instance["answer"]
         if pred_answer == gold_answer:
             return 1.0

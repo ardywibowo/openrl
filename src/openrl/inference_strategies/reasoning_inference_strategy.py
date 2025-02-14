@@ -1,4 +1,5 @@
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import sglang as sgl
@@ -55,8 +56,18 @@ class ReasoningInferenceStrategy(InferenceStrategy):
                 sgl.gen("response", **sampling_parameters)
             )
 
-        def run_single_response(initial_prompt):
-            return resp.run(initial_prompt)
+        def run_single_response(initial_prompt, max_retries=32, delay=1):
+            """Attempts to run a single response, retrying on ConnectionResetError."""
+            for attempt in range(1, max_retries + 1):
+                try:
+                    return resp.run(initial_prompt)
+                except ConnectionResetError as e:
+                    if attempt < max_retries:
+                        print(f"Attempt {attempt} failed with error: {e}. Retrying in {delay} second(s)...")
+                        time.sleep(delay)
+                    else:
+                        print(f"Attempt {attempt} failed. No more retries.")
+                        raise  # Re-raise the error after all retries have been exhausted.
         
         # Prepare a structure to collect responses grouped by instance.
         responses_by_instance = {idx: [None] * self.num_samples for idx in range(len(dataset))}
@@ -105,11 +116,11 @@ class ReasoningInferenceStrategy(InferenceStrategy):
             "full_text_group", 
             [[response.text() for response in responses] for responses in responses_grouped]
         )
-        dataset = dataset.add_column(
-            "logprobs_group", 
-            [[response.get_meta_info("response")["output_token_logprobs"] for response in responses]
-            for responses in responses_grouped]
-        )
+        # dataset = dataset.add_column(
+        #     "logprobs_group", 
+        #     [[response.get_meta_info("response")["output_token_logprobs"] for response in responses]
+        #     for responses in responses_grouped]
+        # )
         dataset = dataset.add_column(
             "num_tokens_group",
             [[response.get_meta_info("response")["completion_tokens"] for response in responses]
@@ -123,7 +134,7 @@ class ReasoningInferenceStrategy(InferenceStrategy):
             "finish_reason_group",
             [
                 [
-                    response.get_meta_info("chain_of_thought")["finish_reason"]['type'] 
+                    response.get_meta_info("response")["finish_reason"]['type'] 
                     for response in responses
                 ]
                 for responses in responses_grouped

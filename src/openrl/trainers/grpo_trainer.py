@@ -335,6 +335,9 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             ), f"State should be INITIAL. Got: {self.state.state_dict()}"
             logger.info("No checkpoint to load. Training will start from scratch.")
         
+        # Compute or reload from disk the episodes with current actor log probabilities and values
+        episodes_dataset = self._get_episodes_w_curr_logps_and_values(episodes_dataset, actor_engine)
+        
         # Train the actor models using PPO
         self._train_actor(episodes_dataset, actor_engine)
         
@@ -409,7 +412,7 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             self.num_iterations * num_optimization_steps_in_iteration
         )
 
-        logger.info(f"***** Running a PPO training step: {self.state.iteration}  *****")
+        logger.info(f"***** Running a GRPO training step: {self.state.iteration}  *****")
 
         logger.info(f"  Num Episodes = {len(episodes):,}")
         logger.info(f"  Num Epochs Per Iteration = {self.num_epochs_per_iteration:,}")
@@ -555,6 +558,8 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
                 shifted_ref_logprobs = inputs[COLUMN_REF_SHIFTED_LOGPS]
             else:
                 shifted_ref_logprobs = None
+            
+            kls = self._compute_kl(shifted_actor_logprobs, shifted_ref_logprobs)
             
             assert "advantages" in inputs
             precomputed_advantages = inputs["advantages"]  # Shape: (batch_size, max_seq_len)
@@ -730,12 +735,10 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
         
         return pg_loss, is_skipped, metrics, ref_kl
 
-    def _compute_rewards(
+    def _compute_kl(
         self,
-        scores: torch.FloatTensor,
         shifted_actor_logprobs: torch.FloatTensor,
         shifted_ref_logprobs: torch.FloatTensor,
-        attention_mask: torch.LongTensor,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
         """
         Compute per token rewards from scores and KL-penalty.
@@ -760,31 +763,14 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             and self.grpo_hparams.kl_penalty_loss_type is None
         ):
             kl = self._compute_kl_penalty(shifted_actor_logprobs, shifted_ref_logprobs)
-            non_score_rewards = -self.kl_ctl.value * kl
         else:
             # KL penalty is not part of the reward
             kl = None
-            non_score_rewards = torch.zeros_like(shifted_actor_logprobs)
-
-        # Initialize the rewards with non-score rewards
-        rewards = non_score_rewards.clone()
-
-        # Find the last non-masked index for each sample in the batch
-        last_non_masked_indices = (
-            torch.cumsum(attention_mask, dim=1)[:, -1] - 1
-        )  # Shape: (batch_size)
-        # Since the length of shifted_actor_log_probs is `max_seq_len - 1`, we need to
-        # subtract 1 from the last non-masked index to get the corresponding index
-        last_non_masked_label_indices = last_non_masked_indices - 1
-
-        # Reward is score + KL penalty
-        batch_size = rewards.size(0)
-        rewards[torch.arange(batch_size), last_non_masked_label_indices] += scores
 
         if kl is not None:
             kl = kl.detach()
 
-        return rewards.detach(), non_score_rewards.detach(), kl
+        return kl
 
     def _compute_kl_penalty(
         self,
@@ -892,7 +878,7 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             logprobs = logprobs_w_query[query_len - 1 :]
             seq_logprob = sum(logprobs)
             return seq_logprob
-
+        
         scores = []
         response_lengths = []
         advantages = []
@@ -1004,7 +990,7 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
         dist.barrier()
 
         logs: Dict[str, float] = {}
-
+        
         # Compute the log values over all processes
         num_steps_since_last_log = (
             self.state.global_step - _globalstep_last_logged
@@ -1139,6 +1125,38 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
             self.log_tensors_on_gpu()
 
         episodes = Dataset.load_from_disk(str(ds_w_ref_logprobs_path))
+        return episodes
+
+    def _get_episodes_w_curr_logps_and_values(
+        self,
+        episodes: Dataset,
+        actor: DeepSpeedEngine,
+    ) -> Dataset:
+        metrics = {}
+
+        logger.info(f"Computing the current actor logprobs.")
+        ds_w_actor_logps_path = (
+            self.checkpoints_dir
+            / f"episodes__iter{self.state.iteration:04d}"
+            / "w_actLogp"
+        )
+        t0 = time.time()
+        aug_ds = self._update_episodes_with_log_probs(
+            actor, episodes, COLUMN_ACTOR_SHIFTED_LOGPS
+        )
+        metrics["timing/train/computing_actor_logprobs"] = time.time() - t0
+        if self._is_main_process():
+            aug_ds.save_to_disk(ds_w_actor_logps_path)
+        self.distributed_state.wait_for_everyone()
+
+        del aug_ds
+        release_memory()
+
+        episodes = Dataset.load_from_disk(str(ds_w_actor_logps_path))
+
+        if len(metrics) > 0:
+            self._cloud_log({**metrics, "train/global_step": self.state.global_step})
+
         return episodes
 
     def _update_episodes_with_log_probs(
@@ -1616,9 +1634,7 @@ class GRPOTrainer(DeepSpeedPolicyTrainer):
                 and checkpoint not in exclude
             ):
                 if self.args.checkpoint_keep_steps is not None:
-                    checkpoint_iteration = self.parse_checkpoint_name(checkpoint.name)[
-                        0
-                    ]
+                    checkpoint_iteration = self.parse_checkpoint_name(checkpoint.name)[0]
                     if checkpoint_iteration % self.args.checkpoint_keep_steps == 0:
                         continue
 

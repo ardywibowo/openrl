@@ -266,7 +266,10 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
             advantages = [reward - group_avg for reward in rewards]
             
             # Compute standard deviation.
-            std = math.sqrt(sum((r - group_avg) ** 2 for r in rewards) / len(rewards)) if rewards else 1.0
+            std = math.sqrt(sum((r - group_avg) ** 2 for r in rewards) / len(rewards)) if rewards else 0.0
+            if std == 0.0:
+                std = 1.0
+            
             advantages = [(reward - group_avg) / std for reward in rewards]
             
             # Save computed lists in the row for later flattening.
@@ -301,7 +304,7 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
                 query_text=row["query"],
                 response_text=row["response"],
                 scores=row["reward"],
-                advantages=row["advantage"],
+                advantages=[row["advantage"] for _ in range(len(response_token_ids))],
             )
             return self._convert_to_dict(episode)
         
@@ -346,10 +349,10 @@ class GRPOEpisodeGenerator(EpisodeGenerator):
         query_token_ids: List[int] = token_ids[:response_start_index]
         response_token_ids: List[int] = token_ids[response_start_index:]
         
-        if self._should_append_bos_to_query():
+        if self.tokenizer.bos_token_id is not None:
             query_token_ids = [self.tokenizer.bos_token_id] + query_token_ids
         
-        if self._should_append_eos_to_response():
+        if self.tokenizer.eos_token_id is not None:
             response_token_ids = response_token_ids + [self.tokenizer.eos_token_id]
         
         return query_token_ids, response_token_ids
